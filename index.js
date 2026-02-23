@@ -89,4 +89,41 @@ client.on('interactionCreate', async interaction => {
                     role.position >= botTopRolePosition
                 ) continue;
 
-                await channel.permissionOverwrites
+                await channel.permissionOverwrites.edit(role, {
+    SendMessages: false
+});
+            }
+
+            await interaction.editReply("Channel locked.");
+        }
+
+        if (commandName === 'unlockchannel') {
+            await interaction.deferReply();
+            await channel.permissionOverwrites.edit(guild.roles.everyone, {
+                SendMessages: null
+            });
+            await interaction.editReply("Channel unlocked.");
+        }
+
+        if (commandName === 'ban') {
+            const user = options.getMember('user');
+            const reason = options.getString('reason') || "No reason provided";
+            await user.ban({ reason });
+            await interaction.reply(`Success: ${user.user.tag} banned.`);
+        }
+
+        if (commandName === 'kick') {
+            const user = options.getMember('user');
+            await user.kick();
+            await interaction.reply(`Success: ${user.user.tag} kicked.`);
+        }
+
+    } catch (error) {
+        console.error(error);
+        if (!interaction.replied) {
+            await interaction.reply({ content: "Error occurred.", ephemeral: true });
+        }
+    }
+});
+
+client.login(TOKEN);
