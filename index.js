@@ -4,8 +4,8 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
 });
 
-// IMPORTANT: Reset your token in Developer Portal after this!
-const TOKEN = 'MTQ3NTIyOTMwODQ5NzgyMTg3OQ.GYBlAN.0CuyFJqo0pxXPlrV4JAamL3bb_9dw_CHqKFLcE'; 
+// Token is now securely pulled from Railway Environment Variables
+const TOKEN = process.env.TOKEN; 
 
 function parseDuration(str) {
     const match = str.match(/^(\d+)([smhd])$/);
@@ -76,15 +76,10 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply(`Success: Timeout removed for ${user.user.tag}.`);
         }
 
-        // --- UPDATED LOCK LOGIC ---
         if (commandName === 'lockchannel') {
             await interaction.deferReply();
             const botTopRolePosition = guild.members.me.roles.highest.position;
-
-            // Lock @everyone
             await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false });
-
-            // Lock every other role below the bot
             const roles = guild.roles.cache;
             for (const [id, role] of roles) {
                 if (
@@ -94,48 +89,4 @@ client.on('interactionCreate', async interaction => {
                     role.position >= botTopRolePosition
                 ) continue;
 
-                await channel.permissionOverwrites.edit(role.id, { SendMessages: false }).catch(() => {});
-            }
-            await interaction.editReply('Success: Channel locked for all non-admin roles below me. 🔒');
-        }
-
-        if (commandName === 'unlockchannel') {
-            await interaction.deferReply();
-            const botTopRolePosition = guild.members.me.roles.highest.position;
-
-            // Unlock @everyone
-            await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null });
-
-            // Reset other role overrides
-            const roles = guild.roles.cache;
-            for (const [id, role] of roles) {
-                if (role.position < botTopRolePosition && !role.managed && role.id !== guild.id) {
-                    await channel.permissionOverwrites.edit(role.id, { SendMessages: null }).catch(() => {});
-                }
-            }
-            await interaction.editReply('Success: Channel unlocked. 🔓');
-        }
-
-        if (commandName === 'ban') {
-            const user = options.getUser('user');
-            const reason = options.getString('reason') || 'No reason provided';
-            await guild.members.ban(user, { reason });
-            await interaction.reply(`Success: ${user.tag} banned. Reason: ${reason}`);
-        }
-        if (commandName === 'kick') {
-            const user = options.getMember('user');
-            await user.kick();
-            await interaction.reply(`Success: ${user.user.tag} kicked.`);
-        }
-    } catch (err) {
-        console.error(err);
-        const errorMsg = 'I do not have enough permissions to perform this action.';
-        if (interaction.deferred) {
-            await interaction.editReply({ content: errorMsg });
-        } else {
-            await interaction.reply({ content: errorMsg, ephemeral: true });
-        }
-    }
-});
-
-client.login(TOKEN);
+                await channel.permissionOverwrites
