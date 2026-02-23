@@ -4,10 +4,9 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
 });
 
-// PASTE YOUR TOKEN HERE
-const TOKEN = 'MTQ3NTIyOTMwODQ5NzgyMTg3OQ.GQBTIj.o2i9xE0WW2gmsEsM9P8IF1ZAHQ0YdC93beirdc'; 
+// IMPORTANT: Reset your token in Developer Portal after this!
+const TOKEN = 'MTQ3NTIyOTMwODQ5NzgyMTg3OQ.GYBlAN.0CuyFJqo0pxXPlrV4JAamL3bb_9dw_CHqKFLcE'; 
 
-// Time parser helper (10m -> ms)
 function parseDuration(str) {
     const match = str.match(/^(\d+)([smhd])$/);
     if (!match) return null;
@@ -29,7 +28,7 @@ const commands = [
     new SlashCommandBuilder().setName('unmute').setDescription('Removes timeout from a member').addUserOption(opt => opt.setName('user').setDescription('The user').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
     new SlashCommandBuilder().setName('to').setDescription('Quick timeout').addUserOption(opt => opt.setName('user').setDescription('The user').setRequired(true)).addStringOption(opt => opt.setName('duration').setDescription('Duration (e.g. 10m, 1h)').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
     new SlashCommandBuilder().setName('unto').setDescription('Removes timeout').addUserOption(opt => opt.setName('user').setDescription('The user').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-    new SlashCommandBuilder().setName('lockchannel').setDescription('Locks the current channel').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+    new SlashCommandBuilder().setName('lockchannel').setDescription('Locks the current channel for all non-admin roles').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
     new SlashCommandBuilder().setName('unlockchannel').setDescription('Unlocks the current channel').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
     new SlashCommandBuilder().setName('ban').setDescription('Bans a member').addUserOption(opt => opt.setName('user').setDescription('The user').setRequired(true)).addStringOption(opt => opt.setName('reason').setDescription('Reason for ban')).setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
     new SlashCommandBuilder().setName('kick').setDescription('Kicks a member').addUserOption(opt => opt.setName('user').setDescription('The user').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
@@ -76,14 +75,47 @@ client.on('interactionCreate', async interaction => {
             await user.timeout(null);
             await interaction.reply(`Success: Timeout removed for ${user.user.tag}.`);
         }
+
+        // --- UPDATED LOCK LOGIC ---
         if (commandName === 'lockchannel') {
+            await interaction.deferReply();
+            const botTopRolePosition = guild.members.me.roles.highest.position;
+
+            // Lock @everyone
             await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false });
-            await interaction.reply('Channel locked. 🔒');
+
+            // Lock every other role below the bot
+            const roles = guild.roles.cache;
+            for (const [id, role] of roles) {
+                if (
+                    role.permissions.has(PermissionFlagsBits.Administrator) || 
+                    role.id === guild.id || 
+                    role.managed || 
+                    role.position >= botTopRolePosition
+                ) continue;
+
+                await channel.permissionOverwrites.edit(role.id, { SendMessages: false }).catch(() => {});
+            }
+            await interaction.editReply('Success: Channel locked for all non-admin roles below me. 🔒');
         }
+
         if (commandName === 'unlockchannel') {
+            await interaction.deferReply();
+            const botTopRolePosition = guild.members.me.roles.highest.position;
+
+            // Unlock @everyone
             await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null });
-            await interaction.reply('Channel unlocked. 🔓');
+
+            // Reset other role overrides
+            const roles = guild.roles.cache;
+            for (const [id, role] of roles) {
+                if (role.position < botTopRolePosition && !role.managed && role.id !== guild.id) {
+                    await channel.permissionOverwrites.edit(role.id, { SendMessages: null }).catch(() => {});
+                }
+            }
+            await interaction.editReply('Success: Channel unlocked. 🔓');
         }
+
         if (commandName === 'ban') {
             const user = options.getUser('user');
             const reason = options.getString('reason') || 'No reason provided';
@@ -97,7 +129,12 @@ client.on('interactionCreate', async interaction => {
         }
     } catch (err) {
         console.error(err);
-        await interaction.reply({ content: 'I do not have enough permissions to perform this action.', ephemeral: true });
+        const errorMsg = 'I do not have enough permissions to perform this action.';
+        if (interaction.deferred) {
+            await interaction.editReply({ content: errorMsg });
+        } else {
+            await interaction.reply({ content: errorMsg, ephemeral: true });
+        }
     }
 });
 
