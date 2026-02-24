@@ -4,13 +4,10 @@ GatewayIntentBits,
 REST,
 Routes,
 SlashCommandBuilder,
-PermissionFlagsBits,
 ActionRowBuilder,
 ButtonBuilder,
 ButtonStyle
 } = require('discord.js');
-
-const fs = require('fs');
 
 const client = new Client({
 intents: [
@@ -21,23 +18,9 @@ GatewayIntentBits.MessageContent
 });
 
 const TOKEN = process.env.TOKEN;
+const GUILD_ID = "1446960659072946218"; // SUNUCU ID YAZ
 
-// ================= WARN STORAGE =================
-
-const WARN_FILE = './warns.json';
-if (!fs.existsSync(WARN_FILE)) {
-fs.writeFileSync(WARN_FILE, JSON.stringify({}));
-}
-
-function getWarns() {
-return JSON.parse(fs.readFileSync(WARN_FILE));
-}
-
-function saveWarns(data) {
-fs.writeFileSync(WARN_FILE, JSON.stringify(data, null, 2));
-}
-
-// ================= DURATION =================
+// ================= TIME PARSER =================
 
 function parseDuration(str) {
 const match = str.match(/^(\d+)([smhd])$/);
@@ -58,46 +41,19 @@ default: return null;
 const commands = [
 
 new SlashCommandBuilder()
-.setName('clear')
-.setDescription('Delete messages')
-.addIntegerOption(opt =>
-opt.setName('amount')
-.setDescription('1-100')
-.setRequired(true))
-.setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
-
-new SlashCommandBuilder()
-.setName('warn')
-.setDescription('Warn member')
-.addUserOption(opt =>
-opt.setName('user')
-.setDescription('User')
-.setRequired(true))
-.addStringOption(opt =>
-opt.setName('reason')
-.setDescription('Reason')
-.setRequired(true))
-.setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-
-new SlashCommandBuilder()
-.setName('warnings')
-.setDescription('Check warnings')
-.addUserOption(opt =>
-opt.setName('user')
-.setDescription('User')
-.setRequired(true))
-.setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-
-new SlashCommandBuilder()
-.setName('voting')
-.setDescription('Timed button voting')
+.setName('vote')
+.setDescription('Create a timed button poll')
 .addStringOption(opt =>
 opt.setName('question')
-.setDescription('Vote question')
+.setDescription('Poll question')
 .setRequired(true))
 .addStringOption(opt =>
 opt.setName('duration')
 .setDescription('Duration (30s, 1m, 5m)')
+.setRequired(true))
+.addStringOption(opt =>
+opt.setName('options')
+.setDescription('Separate options with | (Option1 | Option2 | Option3)')
 .setRequired(true))
 
 ].map(cmd => cmd.toJSON());
@@ -105,89 +61,54 @@ opt.setName('duration')
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 client.once('ready', async () => {
+
 await rest.put(
-Routes.applicationCommands(client.user.id),
+Routes.applicationGuildCommands(client.user.id, GUILD_ID),
 { body: commands }
 );
+
 console.log(`Bot ${client.user.tag} ready.`);
 });
 
-// ================= INTERACTIONS =================
+// ================= INTERACTION =================
 
 client.on('interactionCreate', async interaction => {
 
-if (interaction.isChatInputCommand()) {
+if (!interaction.isChatInputCommand()) return;
 
-const { commandName, options } = interaction;
+if (interaction.commandName === 'vote') {
 
-try {
+const question = interaction.options.getString('question');
+const durationStr = interaction.options.getString('duration');
+const optionsRaw = interaction.options.getString('options');
 
-if (commandName === 'clear') {
-const amount = options.getInteger('amount');
-if (amount < 1 || amount > 100)
-return interaction.reply({ content: '1-100 gir.', ephemeral: true });
+const durationMs = parseDuration(durationStr);
+if (!durationMs)
+return interaction.reply({ content: 'Invalid duration. Use 30s, 1m, 5m', ephemeral: true });
 
-await interaction.channel.bulkDelete(amount, true);
-await interaction.reply({ content: `${amount} mesaj silindi.`, ephemeral: true });
-}
+const optionList = optionsRaw.split('|').map(o => o.trim()).filter(o => o);
 
-if (commandName === 'warn') {
-const member = options.getMember('user');
-const reason = options.getString('reason');
+if (optionList.length < 2 || optionList.length > 5)
+return interaction.reply({ content: 'You must provide 2-5 options.', ephemeral: true });
 
-const data = getWarns();
-if (!data[member.id]) data[member.id] = [];
+let votes = {};
+let voters = new Set();
 
-data[member.id].push({
-reason,
-date: new Date().toISOString()
+optionList.forEach((opt, i) => {
+votes[i] = 0;
 });
 
-saveWarns(data);
-
-await interaction.reply(`${member.user.tag} warnlandı. Toplam: ${data[member.id].length}`);
-}
-
-if (commandName === 'warnings') {
-const member = options.getMember('user');
-const data = getWarns();
-
-if (!data[member.id] || data[member.id].length === 0)
-return interaction.reply(`${member.user.tag} için warn yok.`);
-
-const list = data[member.id]
-.map((w, i) => `${i + 1}. ${w.reason}`)
-.join('\n');
-
-await interaction.reply(`Warnlar:\n${list}`);
-}
-
-if (commandName === 'voting') {
-
-const question = options.getString('question');
-const durationStr = options.getString('duration');
-const durationMs = parseDuration(durationStr);
-
-if (!durationMs)
-return interaction.reply({ content: 'Süre formatı: 30s, 1m, 5m', ephemeral: true });
-
-let up = 0;
-let down = 0;
-const voters = new Set();
-
-const row = new ActionRowBuilder().addComponents(
+const buttons = optionList.map((opt, i) =>
 new ButtonBuilder()
-.setCustomId('vote_yes')
-.setLabel('Kabul')
-.setStyle(ButtonStyle.Success),
-new ButtonBuilder()
-.setCustomId('vote_no')
-.setLabel('Red')
-.setStyle(ButtonStyle.Danger)
+.setCustomId(`vote_${i}`)
+.setLabel(opt)
+.setStyle(ButtonStyle.Primary)
 );
 
+const row = new ActionRowBuilder().addComponents(buttons);
+
 await interaction.reply({
-content: `📊 **Oylama Başladı!**\n${question}\n⏳ Süre: ${durationStr}`,
+content: `📊 **Poll Started**\n\n${question}\n⏳ Duration: ${durationStr}`,
 components: [row]
 });
 
@@ -199,43 +120,35 @@ time: durationMs
 
 collector.on('collect', async i => {
 
-if (voters.has(i.user.id)) {
-return i.reply({ content: 'Zaten oy verdin.', ephemeral: true });
-}
+if (voters.has(i.user.id))
+return i.reply({ content: 'You already voted.', ephemeral: true });
 
+const index = i.customId.split('_')[1];
+votes[index]++;
 voters.add(i.user.id);
 
-if (i.customId === 'vote_yes') up++;
-if (i.customId === 'vote_no') down++;
-
-await i.reply({ content: 'Oyun kaydedildi.', ephemeral: true });
+await i.reply({ content: 'Vote recorded.', ephemeral: true });
 });
 
 collector.on('end', async () => {
 
 const disabledRow = new ActionRowBuilder().addComponents(
-row.components.map(btn => ButtonBuilder.from(btn).setDisabled(true))
+buttons.map(btn => ButtonBuilder.from(btn).setDisabled(true))
 );
 
-let result;
-if (up > down) result = 'Kabul edildi.';
-else if (down > up) result = 'Reddedildi.';
-else result = 'Berabere.';
+let resultText = '';
+
+optionList.forEach((opt, i) => {
+resultText += `${opt}: ${votes[i]} votes\n`;
+});
 
 await msg.edit({
 content:
-`📊 **Oylama Bitti!**\n${question}\n\nKabul: ${up}\nRed: ${down}\n\nSonuç: ${result}`,
+`📊 **Poll Ended**\n\n${question}\n\n${resultText}`,
 components: [disabledRow]
 });
 });
 
-}
-
-} catch (err) {
-console.error(err);
-if (!interaction.replied)
-await interaction.reply({ content: 'Hata oluştu.', ephemeral: true });
-}
 }
 
 });
