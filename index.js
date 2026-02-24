@@ -4,10 +4,13 @@ GatewayIntentBits,
 REST,
 Routes,
 SlashCommandBuilder,
+PermissionFlagsBits,
 ActionRowBuilder,
 ButtonBuilder,
 ButtonStyle
 } = require('discord.js');
+
+const fs = require('fs');
 
 const client = new Client({
 intents: [
@@ -18,7 +21,22 @@ GatewayIntentBits.MessageContent
 });
 
 const TOKEN = process.env.TOKEN;
-const GUILD_ID = "1446960659072946218"; // SUNUCU ID YAZ
+const GUILD_ID = "1446960659072946218";
+
+// ================= WARN STORAGE =================
+
+const WARN_FILE = './warns.json';
+if (!fs.existsSync(WARN_FILE)) {
+fs.writeFileSync(WARN_FILE, JSON.stringify({}));
+}
+
+function getWarns() {
+return JSON.parse(fs.readFileSync(WARN_FILE));
+}
+
+function saveWarns(data) {
+fs.writeFileSync(WARN_FILE, JSON.stringify(data, null, 2));
+}
 
 // ================= TIME PARSER =================
 
@@ -41,6 +59,37 @@ default: return null;
 const commands = [
 
 new SlashCommandBuilder()
+.setName('clear')
+.setDescription('Delete messages')
+.addIntegerOption(opt =>
+opt.setName('amount')
+.setDescription('1-100')
+.setRequired(true))
+.setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
+
+new SlashCommandBuilder()
+.setName('warn')
+.setDescription('Warn a member')
+.addUserOption(opt =>
+opt.setName('user')
+.setDescription('Target user')
+.setRequired(true))
+.addStringOption(opt =>
+opt.setName('reason')
+.setDescription('Reason')
+.setRequired(true))
+.setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+
+new SlashCommandBuilder()
+.setName('warnings')
+.setDescription('Check member warnings')
+.addUserOption(opt =>
+opt.setName('user')
+.setDescription('Target user')
+.setRequired(true))
+.setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+
+new SlashCommandBuilder()
 .setName('vote')
 .setDescription('Create a timed button poll')
 .addStringOption(opt =>
@@ -53,7 +102,7 @@ opt.setName('duration')
 .setRequired(true))
 .addStringOption(opt =>
 opt.setName('options')
-.setDescription('Separate options with | (Option1 | Option2 | Option3)')
+.setDescription('Separate options with |')
 .setRequired(true))
 
 ].map(cmd => cmd.toJSON());
@@ -70,26 +119,75 @@ Routes.applicationGuildCommands(client.user.id, GUILD_ID),
 console.log(`Bot ${client.user.tag} ready.`);
 });
 
-// ================= INTERACTION =================
+// ================= INTERACTIONS =================
 
 client.on('interactionCreate', async interaction => {
 
 if (!interaction.isChatInputCommand()) return;
 
-if (interaction.commandName === 'vote') {
+try {
 
-const question = interaction.options.getString('question');
-const durationStr = interaction.options.getString('duration');
-const optionsRaw = interaction.options.getString('options');
+const { commandName, options } = interaction;
+
+// CLEAR
+if (commandName === 'clear') {
+const amount = options.getInteger('amount');
+
+if (amount < 1 || amount > 100)
+return interaction.reply({ content: 'Enter a number between 1-100.', ephemeral: true });
+
+await interaction.channel.bulkDelete(amount, true);
+return interaction.reply({ content: `${amount} messages deleted.`, ephemeral: true });
+}
+
+// WARN
+if (commandName === 'warn') {
+const member = options.getMember('user');
+const reason = options.getString('reason');
+
+const data = getWarns();
+if (!data[member.id]) data[member.id] = [];
+
+data[member.id].push({
+reason,
+date: new Date().toISOString()
+});
+
+saveWarns(data);
+
+return interaction.reply(`${member.user.tag} warned. Total: ${data[member.id].length}`);
+}
+
+// WARNINGS
+if (commandName === 'warnings') {
+const member = options.getMember('user');
+const data = getWarns();
+
+if (!data[member.id] || data[member.id].length === 0)
+return interaction.reply(`No warnings for ${member.user.tag}.`);
+
+const list = data[member.id]
+.map((w, i) => `${i + 1}. ${w.reason}`)
+.join('\n');
+
+return interaction.reply(`Warnings:\n${list}`);
+}
+
+// VOTE
+if (commandName === 'vote') {
+
+const question = options.getString('question');
+const durationStr = options.getString('duration');
+const optionsRaw = options.getString('options');
 
 const durationMs = parseDuration(durationStr);
 if (!durationMs)
-return interaction.reply({ content: 'Invalid duration. Use 30s, 1m, 5m', ephemeral: true });
+return interaction.reply({ content: 'Invalid duration. Use 30s, 1m, 5m.', ephemeral: true });
 
 const optionList = optionsRaw.split('|').map(o => o.trim()).filter(o => o);
 
 if (optionList.length < 2 || optionList.length > 5)
-return interaction.reply({ content: 'You must provide 2-5 options.', ephemeral: true });
+return interaction.reply({ content: 'Provide 2-5 options.', ephemeral: true });
 
 let votes = {};
 let voters = new Set();
@@ -137,7 +235,6 @@ buttons.map(btn => ButtonBuilder.from(btn).setDisabled(true))
 );
 
 let resultText = '';
-
 optionList.forEach((opt, i) => {
 resultText += `${opt}: ${votes[i]} votes\n`;
 });
@@ -148,7 +245,12 @@ content:
 components: [disabledRow]
 });
 });
+}
 
+} catch (err) {
+console.error(err);
+if (!interaction.replied)
+interaction.reply({ content: 'An error occurred.', ephemeral: true });
 }
 
 });
