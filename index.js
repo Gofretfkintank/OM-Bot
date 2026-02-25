@@ -47,7 +47,7 @@ function parseDuration(str) {
 
 // ================= COMMANDS =================
 const commands = [
-  // Moderation
+  // -------- Moderation (Old) --------
   new SlashCommandBuilder()
     .setName('give-role')
     .setDescription('Assign a role to a member')
@@ -130,7 +130,67 @@ const commands = [
     .addUserOption(opt => opt.setName('user').setDescription('Target user').setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
-  // Vote
+  // -------- New Commands --------
+  new SlashCommandBuilder()
+    .setName('addrole')
+    .setDescription('Create a new role')
+    .addStringOption(opt => opt.setName('name').setDescription('Role name').setRequired(true))
+    .addStringOption(opt => opt.setName('color').setDescription('Hex color code (e.g., #FF0000)'))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
+
+  new SlashCommandBuilder()
+    .setName('delrole')
+    .setDescription('Delete a role')
+    .addRoleOption(opt => opt.setName('role').setDescription('Role to delete').setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
+
+  new SlashCommandBuilder()
+    .setName('editrole')
+    .setDescription('Edit an existing role')
+    .addRoleOption(opt => opt.setName('role').setDescription('Role to edit').setRequired(true))
+    .addStringOption(opt => opt.setName('name').setDescription('New name'))
+    .addStringOption(opt => opt.setName('color').setDescription('New hex color code (e.g., #00FF00)'))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
+
+  new SlashCommandBuilder()
+    .setName('nick')
+    .setDescription('Change a member\'s nickname')
+    .addUserOption(opt => opt.setName('user').setDescription('Target user').setRequired(true))
+    .addStringOption(opt => opt.setName('nickname').setDescription('New nickname (Leave empty to reset)'))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageNicknames),
+
+  new SlashCommandBuilder()
+    .setName('dm')
+    .setDescription('Send a direct message to a user via bot')
+    .addUserOption(opt => opt.setName('user').setDescription('Target user').setRequired(true))
+    .addStringOption(opt => opt.setName('message').setDescription('Message content').setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+
+  new SlashCommandBuilder()
+    .setName('report')
+    .setDescription('Report a user to server moderators')
+    .addUserOption(opt => opt.setName('user').setDescription('User to report').setRequired(true))
+    .addStringOption(opt => opt.setName('reason').setDescription('Reason for reporting').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('slowmode')
+    .setDescription('Set slowmode for the current channel')
+    .addIntegerOption(opt => opt.setName('seconds').setDescription('Slowmode in seconds (0 to disable)').setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+
+  new SlashCommandBuilder()
+    .setName('unban')
+    .setDescription('Unban a user by their ID')
+    .addStringOption(opt => opt.setName('userid').setDescription('Target user ID').setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+
+  new SlashCommandBuilder()
+    .setName('clear-warning')
+    .setDescription('Clear all warnings for a member')
+    .addUserOption(opt => opt.setName('user').setDescription('Target user').setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+
+  // -------- Vote (Old) --------
   new SlashCommandBuilder()
     .setName('vote')
     .setDescription('Create a timed button poll')
@@ -163,7 +223,7 @@ client.on('interactionCreate', async interaction => {
   const { commandName, options, guild, channel } = interaction;
 
   try {
-    // -------- Moderation Commands --------
+    // -------- Old Moderation Commands --------
     if (commandName === 'give-role') {
       const member = options.getMember('user');
       const role = options.getRole('role');
@@ -245,6 +305,88 @@ client.on('interactionCreate', async interaction => {
       if (!data[member.id] || data[member.id].length === 0) return interaction.reply(`No warnings for ${member.user.tag}.`);
       const list = data[member.id].map((w, i) => `${i + 1}. ${w.reason}`).join('\n');
       return interaction.reply(`Warnings:\n${list}`);
+    }
+
+    // -------- New Moderation & Utility Commands --------
+
+    if (commandName === 'addrole') {
+      const name = options.getString('name');
+      const color = options.getString('color');
+      await guild.roles.create({ name, color: color || undefined, reason: `Created by ${interaction.user.tag}` });
+      return interaction.reply(`Success: Role **${name}** has been created.`);
+    }
+
+    if (commandName === 'delrole') {
+      const role = options.getRole('role');
+      const roleName = role.name;
+      await role.delete(`Deleted by ${interaction.user.tag}`);
+      return interaction.reply(`Success: Role **${roleName}** has been deleted.`);
+    }
+
+    if (commandName === 'editrole') {
+      const role = options.getRole('role');
+      const name = options.getString('name');
+      const color = options.getString('color');
+      await role.edit({ 
+        name: name || role.name, 
+        color: color || role.color, 
+        reason: `Edited by ${interaction.user.tag}` 
+      });
+      return interaction.reply(`Success: Role **${name || role.name}** has been updated.`);
+    }
+
+    if (commandName === 'nick') {
+      const member = options.getMember('user');
+      const nickname = options.getString('nickname');
+      await member.setNickname(nickname || null); 
+      return interaction.reply(`Success: Nickname for ${member.user.tag} ${nickname ? `changed to **${nickname}**` : 'has been reset'}.`);
+    }
+
+    if (commandName === 'dm') {
+      const user = options.getUser('user');
+      const messageContent = options.getString('message');
+      try {
+        await user.send(`**Message from ${guild.name} Moderators:**\n${messageContent}`);
+        return interaction.reply({ content: `Success: DM sent to ${user.tag}.`, ephemeral: true });
+      } catch (error) {
+        return interaction.reply({ content: `Failed: Could not DM ${user.tag}. They might have DMs disabled.`, ephemeral: true });
+      }
+    }
+
+    if (commandName === 'report') {
+      const reportedUser = options.getUser('user');
+      const reason = options.getString('reason');
+      // Sunucuda bir log kanalı olmadığından şimdilik sadece konsola yazdırıyor ve kullanıcıya onay veriyoruz.
+      console.log(`[REPORT] ${interaction.user.tag} reported ${reportedUser.tag} for: ${reason}`);
+      return interaction.reply({ content: `Your report against ${reportedUser.tag} has been safely logged. Thank you.`, ephemeral: true });
+    }
+
+    if (commandName === 'slowmode') {
+      const seconds = options.getInteger('seconds');
+      await channel.setRateLimitPerUser(seconds, `Set by ${interaction.user.tag}`);
+      return interaction.reply(`Success: Channel slowmode set to ${seconds} seconds.`);
+    }
+
+    if (commandName === 'unban') {
+      const userId = options.getString('userid');
+      try {
+        await guild.bans.remove(userId, `Unbanned by ${interaction.user.tag}`);
+        return interaction.reply(`Success: User with ID ${userId} has been unbanned.`);
+      } catch (error) {
+        return interaction.reply({ content: `Failed: Could not unban. Make sure the ID is correct and the user is actually banned.`, ephemeral: true });
+      }
+    }
+
+    if (commandName === 'clear-warning') {
+      const member = options.getMember('user');
+      const data = getWarns();
+      if (data[member.id]) {
+        delete data[member.id];
+        saveWarns(data);
+        return interaction.reply(`Success: All warnings for ${member.user.tag} have been cleared.`);
+      } else {
+        return interaction.reply({ content: `${member.user.tag} currently has no warnings to clear.`, ephemeral: true });
+      }
     }
 
     // -------- VOTE --------
