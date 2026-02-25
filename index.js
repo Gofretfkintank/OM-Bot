@@ -21,7 +21,7 @@ const client = new Client({
 });
 
 const TOKEN = process.env.TOKEN;
-const GUILD_ID = "YOUR_GUILD_ID_HERE";
+const GUILD_ID = "1446960659072946218";
 
 // ================= WARN STORAGE =================
 const WARN_FILE = './warns.json';
