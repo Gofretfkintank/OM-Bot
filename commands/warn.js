@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const fs = require('fs');
 module.exports = {
-    data: new SlashCommandBuilder().setName('warn').setDescription('Issue a warning to a member.').addUserOption(o=>o.setName('user').setRequired(true)).addStringOption(o=>o.setName('reason').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+    data: new SlashCommandBuilder().setName('warn').setDescription('Issue a warning.').addUserOption(o=>o.setName('user').setDescription('User to warn').setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Reason for warning').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
     async execute(i) {
         await i.deferReply();
         const u = i.options.getUser('user');
