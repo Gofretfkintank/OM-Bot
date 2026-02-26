@@ -1,5 +1,26 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const ms = require('ms'); // Required for converting '1h', '10m' etc. to milliseconds
+
+// Helper function to convert "1h", "10m" etc. to milliseconds without any external library
+function parseDuration(str) {
+    const regex = /(\d+)([smhd])/g;
+    let totalMs = 0;
+    let match;
+    let found = false;
+
+    while ((match = regex.exec(str)) !== null) {
+        found = true;
+        const value = parseInt(match[1]);
+        const unit = match[2];
+
+        switch (unit) {
+            case 's': totalMs += value * 1000; break;
+            case 'm': totalMs += value * 60 * 1000; break;
+            case 'h': totalMs += value * 60 * 60 * 1000; break;
+            case 'd': totalMs += value * 24 * 60 * 60 * 1000; break;
+        }
+    }
+    return found ? totalMs : null;
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -9,7 +30,7 @@ module.exports = {
             option.setName('target')
                 .setDescription('👤 Member to mute')
                 .setRequired(true))
-        .addStringOption(option => // Changed from Integer to String to support "1h 10m"
+        .addStringOption(option =>
             option.setName('duration')
                 .setDescription('⏱ Duration (e.g., 10m, 1h, 1d)')
                 .setRequired(true))
@@ -33,18 +54,16 @@ module.exports = {
         if (!member.moderatable)
             return interaction.reply({ content: '❌ I cannot mute this member.', ephemeral: true });
 
-        // Convert string (e.g., '1h') to milliseconds
-        const milliseconds = ms(durationString);
+        // Use our custom function instead of the 'ms' library
+        const milliseconds = parseDuration(durationString);
 
-        // Validation for the duration format
         if (!milliseconds || milliseconds <= 0) {
             return interaction.reply({ 
-                content: '❌ Invalid duration format! Use examples like: `10m`, `1h`, `1d`.', 
+                content: '❌ Invalid duration format! Use: `s` (sec), `m` (min), `h` (hour), `d` (day). Example: `1h 30m` or `10m` or `1d`.', 
                 ephemeral: true 
             });
         }
 
-        // Discord timeout limit is 28 days
         if (milliseconds > 28 * 24 * 60 * 60 * 1000) {
             return interaction.reply({ content: '⚠️ Maximum mute duration is 28 days.', ephemeral: true });
         }
@@ -54,7 +73,7 @@ module.exports = {
             return interaction.reply(`🔇 **${member.user.tag}** has been muted.\n⏱ **Duration:** ${durationString}\n📝 **Reason:** ${reason}`);
         } catch (err) {
             console.error(err);
-            return interaction.reply({ content: '❌ Failed to mute the member due to an error.', ephemeral: true });
+            return interaction.reply({ content: '❌ Failed to mute the member.', ephemeral: true });
         }
     },
 };
