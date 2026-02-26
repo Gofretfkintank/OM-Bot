@@ -1,11 +1,24 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+
 module.exports = {
-    data: new SlashCommandBuilder().setName('take-role').setDescription('Remove a role from a user.').addUserOption(o=>o.setName('user').setRequired(true)).addRoleOption(o=>o.setName('role').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
-    async execute(i) {
-        await i.deferReply();
-        const m = i.options.getMember('user');
-        const r = i.options.getRole('role');
-        await m.roles.remove(r);
-        await i.editReply(`❌ **${r.name}** removed from **${m.user.tag}**. 🎭`);
-    }
+    data: new SlashCommandBuilder()
+        .setName('take-role')
+        .setDescription('Remove a role from a member.')
+        .addUserOption(option => 
+            option.setName('user')
+                .setDescription('The user to remove the role from')
+                .setRequired(true))
+        .addRoleOption(option => 
+            option.setName('role')
+                .setDescription('The role to take back')
+                .setRequired(true))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
+    async execute(interaction) {
+        await interaction.deferReply();
+        const member = interaction.options.getMember('user');
+        const role = interaction.options.getRole('role');
+        
+        await member.roles.remove(role);
+        await interaction.editReply(`❌ **Success:** **${role.name}** has been removed from **${member.user.tag}**. 🎭`);
+    },
 };
