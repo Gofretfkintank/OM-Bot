@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 module.exports = {
-    data: new SlashCommandBuilder().setName('nick').setDescription('Change a member’s nickname.').addUserOption(o=>o.setName('user').setRequired(true)).addStringOption(o=>o.setName('name').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ManageNicknames),
+    data: new SlashCommandBuilder().setName('nick').setDescription('Change nickname.').addUserOption(o=>o.setName('user').setDescription('Target user').setRequired(true)).addStringOption(o=>o.setName('name').setDescription('New nickname').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ManageNicknames),
     async execute(i) {
         await i.deferReply();
         const m = i.options.getMember('user');
