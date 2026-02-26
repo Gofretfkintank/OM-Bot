@@ -1,15 +1,27 @@
 const { SlashCommandBuilder } = require('discord.js');
+
 module.exports = {
-    data: new SlashCommandBuilder().setName('dm').setDescription('Send a direct message.').addUserOption(o=>o.setName('user').setDescription('User to DM').setRequired(true)).addStringOption(o=>o.setName('msg').setDescription('Message content').setRequired(true)),
-    async execute(i) {
-        await i.deferReply({ ephemeral: true });
-        const u = i.options.getUser('user');
-        const m = i.options.getString('msg');
+    data: new SlashCommandBuilder()
+        .setName('dm')
+        .setDescription('Send a direct message through the bot.')
+        .addUserOption(option => 
+            option.setName('user')
+                .setDescription('The user to message')
+                .setRequired(true))
+        .addStringOption(option => 
+            option.setName('msg')
+                .setDescription('The content of the message')
+                .setRequired(true)),
+    async execute(interaction) {
+        await interaction.deferReply({ ephemeral: true });
+        const user = interaction.options.getUser('user');
+        const message = interaction.options.getString('msg');
+        
         try {
-            await u.send(`📩 **Message from ${i.guild.name}:**\n${m}`);
-            await i.editReply(`✅ DM sent to **${u.tag}**.`);
-        } catch {
-            await i.editReply('❌ Failed: DMs are closed.');
+            await user.send(`📩 **Direct Message from ${interaction.guild.name}:**\n${message}`);
+            await interaction.editReply(`✅ **Success:** DM sent to **${user.tag}**.`);
+        } catch (error) {
+            await interaction.editReply('❌ **Failed:** This user has their DMs closed.');
         }
-    }
+    },
 };
