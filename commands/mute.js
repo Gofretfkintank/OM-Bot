@@ -3,64 +3,42 @@ const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('mute')
-        .setDescription('Timeout a member with a specific unit.')
+        .setDescription('🔇 Mute a member using Discord timeout.')
         .addUserOption(option =>
-            option.setName('user')
-                .setDescription('The user to mute')
+            option.setName('target')
+                .setDescription('👤 Member to mute')
                 .setRequired(true))
         .addIntegerOption(option =>
-            option.setName('time')
-                .setDescription('Amount of time')
+            option.setName('duration')
+                .setDescription('⏱ Duration in minutes')
                 .setRequired(true))
         .addStringOption(option =>
-            option.setName('unit')
-                .setDescription('Time unit')
-                .setRequired(true)
-                .addChoices(
-                    { name: 'Minutes', value: 'm' },
-                    { name: 'Hours', value: 'h' },
-                    { name: 'Days', value: 'd' }
-                ))
+            option.setName('reason')
+                .setDescription('📝 Reason for mute')
+                .setRequired(false))
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
     async execute(interaction) {
-
-        await interaction.deferReply({ ephemeral: true });
-
-        const member = interaction.options.getMember('user');
-        const time = interaction.options.getInteger('time');
-        const unit = interaction.options.getString('unit');
+        const member = interaction.options.getMember('target');
+        const minutes = interaction.options.getInteger('duration');
+        const reason = interaction.options.getString('reason') || 'No reason provided';
 
         if (!member)
-            return interaction.editReply('❌ User not found.');
-
-        if (!interaction.guild.members.me.permissions.has(PermissionFlagsBits.ModerateMembers))
-            return interaction.editReply('❌ I do not have Moderate Members permission.');
+            return interaction.reply({ content: '❌ Member not found.', ephemeral: true });
 
         if (member.id === interaction.user.id)
-            return interaction.editReply('❌ You cannot mute yourself.');
-
-        if (member.user.bot)
-            return interaction.editReply('❌ You cannot mute a bot.');
+            return interaction.reply({ content: '⚠️ You cannot mute yourself.', ephemeral: true });
 
         if (!member.moderatable)
-            return interaction.editReply('❌ I cannot timeout this member. Check role hierarchy.');
+            return interaction.reply({ content: '❌ I cannot mute this member.', ephemeral: true });
 
-        let durationMs = time * 60 * 1000; // minutes by default
-
-        if (unit === 'h') durationMs = time * 60 * 60 * 1000;
-        if (unit === 'd') durationMs = time * 24 * 60 * 60 * 1000;
-
-        if (durationMs > 2419200000)
-            return interaction.editReply('❌ You cannot timeout a member for more than 28 days.');
+        const milliseconds = minutes * 60 * 1000;
 
         try {
-            await member.timeout(durationMs);
-            const unitName = unit === 'm' ? 'minutes' : unit === 'h' ? 'hours' : 'days';
-            await interaction.editReply(`🔇 ${member.user.tag} has been muted for ${time} ${unitName}.`);
-        } catch (error) {
-            console.error(error);
-            await interaction.editReply('❌ Internal error. Check permissions and role position.');
+            await member.timeout(milliseconds, reason);
+            return interaction.reply(`🔇 ${member.user.tag} has been muted for ⏱ **${minutes} minute(s)**\n📝 Reason: ${reason}`);
+        } catch (err) {
+            return interaction.reply({ content: '❌ Failed to mute the member.', ephemeral: true });
         }
     },
 };
