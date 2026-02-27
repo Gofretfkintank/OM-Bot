@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 
-// Helper function for duration (No library needed for mobile users)
+// 1h, 10m gibi süreleri milisaniyeye çeviren fonksiyon (Paket gerektirmez)
 function parseDuration(str) {
     const regex = /(\d+)([smhd])/g;
     let totalMs = 0;
@@ -28,7 +28,7 @@ module.exports = {
             option.setName('target')
                 .setDescription('👤 Member to mute')
                 .setRequired(true))
-        .addStringOption(option =>
+        .addStringOption(option => // MaoMao'nun dediği gibi Integer değil, senin istediğin gibi String!
             option.setName('duration')
                 .setDescription('⏱ Duration (e.g., 10m, 1h, 1d)')
                 .setRequired(true))
@@ -39,33 +39,37 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
     async execute(interaction) {
+        // Üyeyi ID üzerinden en garanti yolla çekiyoruz
         const targetUser = interaction.options.getUser('target');
-        let member;
-
-        try {
-            // FIX: "Member not found" - Fetching member directly from the server
-            member = await interaction.guild.members.fetch(targetUser.id);
-        } catch (err) {
-            return interaction.reply({ 
-                content: '❌ Member not found in this server.', 
-                flags: [MessageFlags.Ephemeral] // FIX: Using flags instead of deprecated ephemeral: true
-            });
+        
+        // Önemli: Önce hafızaya bak, yoksa sunucudan getir
+        let member = interaction.options.getMember('target');
+        if (!member) {
+            try {
+                member = await interaction.guild.members.fetch(targetUser.id);
+            } catch (e) {
+                return interaction.reply({ 
+                    content: '❌ Member could not be found! Please make sure the member is in the server.', 
+                    flags: [MessageFlags.Ephemeral] 
+                });
+            }
         }
 
         const durationString = interaction.options.getString('duration');
         const reason = interaction.options.getString('reason') || 'No reason provided';
 
+        // Güvenlik kontrolleri
         if (member.id === interaction.user.id)
             return interaction.reply({ content: '⚠️ You cannot mute yourself.', flags: [MessageFlags.Ephemeral] });
 
         if (!member.moderatable)
-            return interaction.reply({ content: '❌ I cannot mute this member. Check my role position!', flags: [MessageFlags.Ephemeral] });
+            return interaction.reply({ content: '❌ I cannot mute this member. My role might be below theirs!', flags: [MessageFlags.Ephemeral] });
 
         const milliseconds = parseDuration(durationString);
 
         if (!milliseconds || milliseconds <= 0) {
             return interaction.reply({ 
-                content: '❌ Invalid format! Use: `10m`, `1h`, `1d`.', 
+                content: '❌ Invalid format! Please use `10m`, `1h` or `1d`.', 
                 flags: [MessageFlags.Ephemeral] 
             });
         }
@@ -75,7 +79,7 @@ module.exports = {
             return interaction.reply(`🔇 **${member.user.tag}** has been muted.\n⏱ **Duration:** ${durationString}\n📝 **Reason:** ${reason}`);
         } catch (err) {
             console.error(err);
-            return interaction.reply({ content: '❌ Failed to mute the member.', flags: [MessageFlags.Ephemeral] });
+            return interaction.reply({ content: '❌ Failed to mute. Check my permissions!', flags: [MessageFlags.Ephemeral] });
         }
     },
 };
