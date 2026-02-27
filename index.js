@@ -21,17 +21,15 @@ for (const file of commandFiles) {
     client.commands.set(command.data.name, command);
 }
 
-// BURASI GÜNCELLENDİ: async eklendi ve temizleme kodu konuldu
 client.once('ready', async () => {
     console.log(`[ONLINE] ${client.user.tag} is running on Railway! 🚀`);
 
     try {
-        console.log('Eski global komutlar temizleniyor...');
-        // Tüm global slash komutlarını siler
+        console.log('Deleting all old global commands...');
         await client.application.commands.set([]); 
-        console.log('✅ Global komutlar başarıyla temizlendi!');
+        console.log('✅ Global commands successfully deleted!');
     } catch (error) {
-        console.error('❌ Temizleme hatası:', error);
+        console.error('❌ Error while deleting global commands:', error);
     }
 });
 
