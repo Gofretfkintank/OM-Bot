@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 
-// Duration parser (10m, 1h, 1d, 30s etc.)
 function parseDuration(str) {
     const regex = /(\d+)([smhd])/g;
     let totalMs = 0;
@@ -33,73 +32,71 @@ module.exports = {
                 .setRequired(true))
         .addStringOption(option =>
             option.setName('duration')
-                .setDescription('Duration (e.g. 10m, 1h, 1d)')
+                .setDescription('Duration (10m, 1h, 1d)')
                 .setRequired(true))
         .addStringOption(option =>
             option.setName('reason')
-                .setDescription('Reason for mute')
+                .setDescription('Reason')
                 .setRequired(false))
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
     async execute(interaction) {
 
         if (!interaction.guild) {
-            return interaction.reply({
-                content: 'This command can only be used inside a server.',
-                ephemeral: true
-            });
+            return interaction.reply({ content: 'Server only command.', ephemeral: true });
         }
 
         const targetUser = interaction.options.getUser('target');
-        const durationString = interaction.options.getString('duration');
-        const reason = interaction.options.getString('reason') || 'No reason provided';
+
+        console.log("----- DEBUG -----");
+        console.log("Guild ID:", interaction.guild.id);
+        console.log("Bot guilds:", interaction.client.guilds.cache.map(g => g.id));
+        console.log("Target ID:", targetUser.id);
+        console.log("-----------------");
 
         let member;
 
         try {
             member = await interaction.guild.members.fetch(targetUser.id);
-        } catch (error) {
+            console.log("Member fetched:", member.user.tag);
+        } catch (err) {
+            console.log("FETCH FAILED");
             return interaction.reply({
                 content: 'Member could not be found in this server.',
                 ephemeral: true
             });
         }
 
+        const durationString = interaction.options.getString('duration');
+        const reason = interaction.options.getString('reason') || 'No reason provided';
+
         if (member.id === interaction.user.id) {
-            return interaction.reply({
-                content: 'You cannot mute yourself.',
-                ephemeral: true
-            });
+            return interaction.reply({ content: 'You cannot mute yourself.', ephemeral: true });
         }
 
         if (!member.moderatable) {
             return interaction.reply({
-                content: 'I cannot mute this member. My role might be below theirs.',
+                content: 'I cannot mute this member. Role position issue.',
                 ephemeral: true
             });
         }
 
-        const milliseconds = parseDuration(durationString);
+        const ms = parseDuration(durationString);
 
-        if (!milliseconds || milliseconds <= 0) {
+        if (!ms) {
             return interaction.reply({
-                content: 'Invalid duration format. Use 10m, 1h, 1d etc.',
+                content: 'Invalid duration format. Example: 10m, 1h, 1d',
                 ephemeral: true
             });
         }
 
         try {
-            await member.timeout(milliseconds, reason);
-
+            await member.timeout(ms, reason);
+            return interaction.reply(`🔇 ${member.user.tag} muted for ${durationString}`);
+        } catch (error) {
+            console.error(error);
             return interaction.reply({
-                content: `🔇 ${member.user.tag} has been muted.\n⏱ Duration: ${durationString}\n📝 Reason: ${reason}`
-            });
-
-        } catch (err) {
-            console.error(err);
-
-            return interaction.reply({
-                content: 'Failed to mute the member. Check my permissions and role position.',
+                content: 'Timeout failed. Check permissions.',
                 ephemeral: true
             });
         }
