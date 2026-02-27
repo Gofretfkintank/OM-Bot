@@ -21,8 +21,18 @@ for (const file of commandFiles) {
     client.commands.set(command.data.name, command);
 }
 
-client.once('ready', () => {
+// BURASI GÜNCELLENDİ: async eklendi ve temizleme kodu konuldu
+client.once('ready', async () => {
     console.log(`[ONLINE] ${client.user.tag} is running on Railway! 🚀`);
+
+    try {
+        console.log('Eski global komutlar temizleniyor...');
+        // Tüm global slash komutlarını siler
+        await client.application.commands.set([]); 
+        console.log('✅ Global komutlar başarıyla temizlendi!');
+    } catch (error) {
+        console.error('❌ Temizleme hatası:', error);
+    }
 });
 
 client.on('interactionCreate', async interaction => {
