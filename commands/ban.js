@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -11,24 +11,24 @@ module.exports = {
         await interaction.deferReply();
         
         const targetMember = interaction.options.getMember('target');
-        const targetUser = interaction.options.getUser('target'); // Sunucuda yoksa bile ID'sini almak için
+        const targetUser = interaction.options.getUser('target');
         const reason = interaction.options.getString('reason') || 'No reason provided';
 
-        // Hata veren kısım burasıydı, targetMember null ise bot çöküyordu.
-        // Artık sadece kullanıcı sunucudaysa .bannable kontrolü yapıyor.
         if (targetMember && !targetMember.bannable) {
             return interaction.editReply('❌ I cannot ban this user.');
         }
 
         try {
-            // Kullanıcı sunucudaysa targetMember üzerinden, değilse ID (targetUser) üzerinden banlar
             await interaction.guild.members.ban(targetUser.id, { reason });
             
-            // Senin orijinal mesajın:
-            await interaction.editReply(`🛰 **${targetUser.tag}** The user has been neutralized by the OM Bot. Reason: ${reason}`);
+            // Embed oluşturma
+            const banEmbed = new EmbedBuilder()
+                .setColor(0x2ecc71) // Yeşil renk (Görüntüdeki gibi)
+                .setDescription(`🛰️ **${targetUser.tag}** The user has been neutralized by the OM Bot.\n**Reason:** ${reason}`);
+
+            await interaction.editReply({ embeds: [banEmbed] });
         } catch (error) {
             await interaction.editReply('❌ I cannot ban this user.');
         }
     }
 };
-// Triggering redeploy for bug fix
