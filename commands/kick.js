@@ -16,6 +16,6 @@ module.exports = {
         if (!user.kickable) return interaction.editReply('❌ **Error:** I cannot kick this user.');
         
         await user.kick();
-        await interaction.editReply(`👢 **${user.user.tag}** has been kicked from the server.`);
+        await interaction.editReply(`🔫 **${user.user.tag}** User session has been terminated by the OM Bot.`);
     },
 };
