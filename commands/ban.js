@@ -13,6 +13,6 @@ module.exports = {
         const reason = interaction.options.getString('reason') || 'No reason provided';
         if (!target.bannable) return interaction.editReply('❌ I cannot ban this user.');
         await target.ban({ reason });
-        await interaction.editReply(`🔨 **${target.user.tag}** has been banned. Reason: ${reason}`);
+        await interaction.editReply(`🛰 **${target.user.tag}** The user has been neutralized by the OM Bot. Reason: ${reason}`);
     }
 };
