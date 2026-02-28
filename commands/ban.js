@@ -9,10 +9,25 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
     async execute(interaction) {
         await interaction.deferReply();
-        const target = interaction.options.getMember('target');
+        
+        const targetMember = interaction.options.getMember('target');
+        const targetUser = interaction.options.getUser('target'); // Sunucuda yoksa bile ID'sini almak için
         const reason = interaction.options.getString('reason') || 'No reason provided';
-        if (!target.bannable) return interaction.editReply('❌ I cannot ban this user.');
-        await target.ban({ reason });
-        await interaction.editReply(`🛰 **${target.user.tag}** The user has been neutralized by the OM Bot. Reason: ${reason}`);
+
+        // Hata veren kısım burasıydı, targetMember null ise bot çöküyordu.
+        // Artık sadece kullanıcı sunucudaysa .bannable kontrolü yapıyor.
+        if (targetMember && !targetMember.bannable) {
+            return interaction.editReply('❌ I cannot ban this user.');
+        }
+
+        try {
+            // Kullanıcı sunucudaysa targetMember üzerinden, değilse ID (targetUser) üzerinden banlar
+            await interaction.guild.members.ban(targetUser.id, { reason });
+            
+            // Senin orijinal mesajın:
+            await interaction.editReply(`🛰 **${targetUser.tag}** The user has been neutralized by the OM Bot. Reason: ${reason}`);
+        } catch (error) {
+            await interaction.editReply('❌ I cannot ban this user.');
+        }
     }
 };
