@@ -24,3 +24,4 @@ module.exports = {
         await interaction.editReply(`🔫 **${user.user.tag}** User session has been terminated by the OM Bot.`);
     },
 };
+// Triggering redeploy for bug fix
