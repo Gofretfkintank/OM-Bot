@@ -31,6 +31,6 @@ module.exports = {
             .setTimestamp();
             
         await logChannel.send({ embeds: [embed] });
-        await interaction.editReply('✅ **Success:** Your report has been submitted to staff.');
+        await interaction.editReply('✅ **Success:** Incident reported. Target is now under surveillance by the support squad..');
     },
 };
