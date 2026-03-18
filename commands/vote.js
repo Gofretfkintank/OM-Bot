@@ -28,27 +28,19 @@ module.exports = {
         ),
 
     async execute(interaction) {
-
         await interaction.deferReply();
 
         const question = interaction.options.getString('question');
         const optionsArr = interaction.options.getString('options')
             .split(',')
             .map(s => s.trim())
-            .filter(s => s.length > 0);
-
-        if (optionsArr.length < 2)
-            return interaction.editReply('❌ At least 2 options required.');
-
-        if (optionsArr.length > 5)
-            return interaction.editReply('❌ Max 5 options.');
+            .slice(0, 5);
 
         const duration = interaction.options.getInteger('duration');
         const endTime = Date.now() + duration * 60000;
 
         const votes = {};
-        const userVotes = {};
-
+        const userCount = {};
         optionsArr.forEach(opt => votes[opt] = []);
 
         const makeBar = (count) => {
@@ -59,29 +51,28 @@ module.exports = {
         };
 
         const buildEmbed = (ended = false) => {
-
-            const total = Object.values(votes).reduce((a, b) => a + b.length, 0);
+            const remainingMs = endTime - Date.now();
+            const remainingMin = Math.max(0, Math.floor(remainingMs / 60000));
 
             const fields = optionsArr.map(opt => ({
                 name: `🔹 ${opt}`,
-                value: `🗳️ \`${votes[opt].length}\`\n${makeBar(votes[opt].length)}`,
+                value: `\`${votes[opt].length} votes\`\n${makeBar(votes[opt].length)}`,
                 inline: false
             }));
 
-            return new EmbedBuilder()
-                .setTitle(`📊 ${question}`)
+            const embed = new EmbedBuilder()
+                .setTitle(`📊 ${question}`) // büyük başlık
                 .setColor('Blue')
-                .addFields(fields)
                 .setFooter({ 
-                    text: ended 
-                        ? `Ended • Total votes: ${total}` 
-                        : `Total votes: ${total}`
-                })
-                .setDescription(
-                    ended 
-                    ? '📌 Poll finished.'
-                    : `⏱️ Ends <t:${Math.floor(endTime/1000)}:R>\n⚠️ You have 2 votes. Click again to remove.`
-                );
+                    text: ended ? 'Poll Ended' : `⏱️ Time remaining: ${remainingMin} minute(s)`
+                });
+
+            if (!ended) {
+                embed.setDescription('**⚠️ You only have 2 votes, don’t missclick!**');
+                embed.addFields(fields);
+            }
+
+            return embed;
         };
 
         const row = new ActionRowBuilder().addComponents(
@@ -89,12 +80,11 @@ module.exports = {
                 new ButtonBuilder()
                     .setCustomId(`v_${i}`)
                     .setLabel(opt)
-                    .setStyle(ButtonStyle.Primary) // hepsi mavi
+                    .setStyle(ButtonStyle.Primary) // mavi
             )
         );
 
         const msg = await interaction.editReply({
-            content: '@everyone 📢 New poll started!',
             embeds: [buildEmbed()],
             components: [row]
         });
@@ -105,51 +95,49 @@ module.exports = {
         });
 
         collector.on('collect', async i => {
-
-            await i.deferReply({ ephemeral: true });
-
             const idx = parseInt(i.customId.split('_')[1]);
             const selected = optionsArr[idx];
 
-            if (!userVotes[i.user.id]) userVotes[i.user.id] = [];
+            if (!userCount[i.user.id]) userCount[i.user.id] = 0;
 
-            // toggle vote
-            if (userVotes[i.user.id].includes(selected)) {
-                votes[selected] = votes[selected].filter(u => u !== i.user.id);
-                userVotes[i.user.id] = userVotes[i.user.id].filter(o => o !== selected);
+            if (userCount[i.user.id] >= 2)
+                return i.reply({ content: '🚫 You already used your 2 votes.', ephemeral: true });
 
-                return i.editReply(`❌ Removed vote: **${selected}**`);
-            }
-
-            if (userVotes[i.user.id].length >= 2)
-                return i.editReply('🚫 You used your 2 votes.');
+            if (votes[selected].includes(i.user.id))
+                return i.reply({ content: '❌ You already voted for this option.', ephemeral: true });
 
             votes[selected].push(i.user.id);
-            userVotes[i.user.id].push(selected);
+            userCount[i.user.id]++;
 
-            await i.editReply(`✅ Voted: **${selected}** (${userVotes[i.user.id].length}/2)`);
-
-            await interaction.editReply({
-                embeds: [buildEmbed()]
-            });
+            await i.reply({ content: `✅ Vote registered for **${selected}** (${userCount[i.user.id]}/2)`, ephemeral: true });
         });
 
+        // Embed her 10 saniyede güncellensin
+        const interval = setInterval(async () => {
+            if (collector.ended) return clearInterval(interval);
+            await interaction.editReply({ embeds: [buildEmbed()] });
+        }, 10000);
+
         collector.on('end', async () => {
+            clearInterval(interval);
 
-            const max = Math.max(...optionsArr.map(o => votes[o].length));
-            const winners = optionsArr.filter(o => votes[o].length === max);
+            // Kazanan
+            const winner = optionsArr.reduce((a, b) => votes[a].length >= votes[b].length ? a : b);
 
-            const title = winners.length > 1
-                ? `🤝 Tie: ${winners.join(', ')}`
-                : `🏆 Winner: ${winners[0]}`;
-
-            const resultEmbed = buildEmbed(true)
-                .setTitle(title);
+            // Sadece kazanan embed
+            const resultEmbed = new EmbedBuilder()
+                .setTitle(`🏆 WINNER: ${winner}`)
+                .setColor('Blue')
+                .setDescription('Poll has ended!')
+                .setFooter({ text: 'Poll Ended' });
 
             await interaction.editReply({
                 embeds: [resultEmbed],
                 components: []
             });
         });
+
+        // Opsiyonel: bot vote açıldığında herkesi etiketle
+        await interaction.followUp({ content: `@everyone 📢 A new poll started!`, ephemeral: false });
     }
 };
