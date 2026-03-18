@@ -32,17 +32,16 @@ module.exports = {
         await interaction.deferReply();
 
         const question = interaction.options.getString('question');
-        const rawOptions = interaction.options.getString('options');
-
-        const optionsArr = rawOptions.split(',')
+        const optionsArr = interaction.options.getString('options')
+            .split(',')
             .map(s => s.trim())
             .filter(s => s.length > 0);
 
         if (optionsArr.length < 2)
-            return interaction.editReply('❌ You need at least 2 options.');
+            return interaction.editReply('❌ At least 2 options required.');
 
         if (optionsArr.length > 5)
-            return interaction.editReply('❌ Maximum 5 options allowed.');
+            return interaction.editReply('❌ Max 5 options.');
 
         const duration = interaction.options.getInteger('duration');
         const endTime = Date.now() + duration * 60000;
@@ -61,8 +60,6 @@ module.exports = {
 
         const buildEmbed = (ended = false) => {
 
-            const remainingMs = endTime - Date.now();
-            const remainingMin = Math.max(0, Math.floor(remainingMs / 60000));
             const total = Object.values(votes).reduce((a, b) => a + b.length, 0);
 
             const fields = optionsArr.map(opt => ({
@@ -73,17 +70,17 @@ module.exports = {
 
             return new EmbedBuilder()
                 .setTitle(`📊 ${question}`)
-                .setColor(ended ? 'Gold' : 'Blue')
+                .setColor('Blue')
                 .addFields(fields)
                 .setFooter({ 
                     text: ended 
                         ? `Ended • Total votes: ${total}` 
-                        : `⏱️ Time left: ${remainingMin} min • Total: ${total}`
+                        : `Total votes: ${total}`
                 })
                 .setDescription(
                     ended 
                     ? '📌 Poll finished.'
-                    : '⚠️ Each user has **2 votes**.\nYou can change your vote by clicking again.'
+                    : `⏱️ Ends <t:${Math.floor(endTime/1000)}:R>\n⚠️ You have 2 votes. Click again to remove.`
                 );
         };
 
@@ -92,25 +89,15 @@ module.exports = {
                 new ButtonBuilder()
                     .setCustomId(`v_${i}`)
                     .setLabel(opt)
-                    .setStyle(
-                        i === 0 ? ButtonStyle.Success :
-                        i === 1 ? ButtonStyle.Danger :
-                        ButtonStyle.Primary
-                    )
+                    .setStyle(ButtonStyle.Primary) // hepsi mavi
             )
         );
 
         const msg = await interaction.editReply({
-            content: '@everyone 📢 A new poll has started!',
+            content: '@everyone 📢 New poll started!',
             embeds: [buildEmbed()],
             components: [row]
         });
-
-        const interval = setInterval(() => {
-            interaction.editReply({
-                embeds: [buildEmbed()]
-            });
-        }, 15000);
 
         const collector = msg.createMessageComponentCollector({
             componentType: ComponentType.Button,
@@ -131,16 +118,16 @@ module.exports = {
                 votes[selected] = votes[selected].filter(u => u !== i.user.id);
                 userVotes[i.user.id] = userVotes[i.user.id].filter(o => o !== selected);
 
-                return i.editReply(`❌ Vote removed: **${selected}**`);
+                return i.editReply(`❌ Removed vote: **${selected}**`);
             }
 
             if (userVotes[i.user.id].length >= 2)
-                return i.editReply('🚫 You already used your 2 votes.');
+                return i.editReply('🚫 You used your 2 votes.');
 
             votes[selected].push(i.user.id);
             userVotes[i.user.id].push(selected);
 
-            await i.editReply(`✅ Vote registered: **${selected}** (${userVotes[i.user.id].length}/2)`);
+            await i.editReply(`✅ Voted: **${selected}** (${userVotes[i.user.id].length}/2)`);
 
             await interaction.editReply({
                 embeds: [buildEmbed()]
@@ -149,17 +136,12 @@ module.exports = {
 
         collector.on('end', async () => {
 
-            clearInterval(interval);
-
             const max = Math.max(...optionsArr.map(o => votes[o].length));
             const winners = optionsArr.filter(o => votes[o].length === max);
 
-            let title;
-            if (winners.length > 1) {
-                title = `🤝 Tie: ${winners.join(', ')}`;
-            } else {
-                title = `🏆 Winner: ${winners[0]}`;
-            }
+            const title = winners.length > 1
+                ? `🤝 Tie: ${winners.join(', ')}`
+                : `🏆 Winner: ${winners[0]}`;
 
             const resultEmbed = buildEmbed(true)
                 .setTitle(title);
