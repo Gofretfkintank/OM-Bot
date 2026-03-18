@@ -58,25 +58,29 @@ module.exports = {
 
             const fields = optionsArr.map(opt => ({
                 name: `🔹 ${opt}`,
-                value: `\`${votes[opt].length} votes\` / Total: ${totalVotes}\n${makeBar(votes[opt].length)}`,
+                value: `\`${votes[opt].length} votes\`\n${makeBar(votes[opt].length)}`,
                 inline: false
             }));
 
-            const embed = new EmbedBuilder()
-                .setTitle(`📊 ${question.toUpperCase()}`)
-                .setColor('Blue')
-                .setFooter({ 
-                    text: ended 
-                        ? 'Poll Ended' 
-                        : `⏱️ Time remaining: ${minutes}:${seconds.toString().padStart(2,'0')}`
-                });
-
             if (!ended) {
-                embed.setDescription('**⚠️ You only have 2 votes, don’t missclick!**');
-                embed.addFields(fields);
-            }
+                const embed = new EmbedBuilder()
+                    .setTitle(`📊 ${question.toUpperCase()}`)
+                    .setColor('Blue')
+                    .setDescription(`**Total votes: ${totalVotes}**\n⏱️ Time remaining: ${minutes}:${seconds.toString().padStart(2,'0')}`)
+                    .addFields(fields)
+                    .addFields({ name: '\u200B', value: '**⚠️ You only have 2 votes, don’t missclick!**', inline: false })
+                    .setFooter({ text: 'Vote Poll' });
 
-            return embed;
+                return embed;
+            } else {
+                const winner = optionsArr.reduce((a,b)=>votes[a].length >= votes[b].length ? a:b);
+                const embed = new EmbedBuilder()
+                    .setTitle(`🏆 WINNER: ${winner}`)
+                    .setColor('Blue')
+                    .setDescription('Poll has ended!')
+                    .setFooter({ text: 'Poll Ended' });
+                return embed;
+            }
         };
 
         const row = new ActionRowBuilder().addComponents(
@@ -125,6 +129,7 @@ module.exports = {
 
         collector.on('end', async () => {
             clearInterval(interval);
+
             const winner = optionsArr.reduce((a,b) => votes[a].length >= votes[b].length ? a : b);
 
             const resultEmbed = new EmbedBuilder()
