@@ -63,23 +63,21 @@ module.exports = {
             }));
 
             if (!ended) {
-                const embed = new EmbedBuilder()
-                    .setTitle(`📊 ${question.toUpperCase()}`)
+                return new EmbedBuilder()
+                    .setTitle(`📊 ${question.toUpperCase()}`)   // Soru başlığı
                     .setColor('Blue')
-                    .setDescription(`**Total votes: ${totalVotes}**\n⏱️ Time remaining: ${minutes}:${seconds.toString().padStart(2,'0')}`)
-                    .addFields(fields)
-                    .addFields({ name: '\u200B', value: '**⚠️ You only have 2 votes, don’t missclick!**', inline: false })
-                    .setFooter({ text: 'Vote Poll' });
-
-                return embed;
+                    .addFields(
+                        { name: '\u200B', value: '**⚠️ You only have 2 votes, don’t missclick!**', inline: false }, // Uyarı
+                        ...fields,
+                        { name: '\u200B', value: `⏱️ Time remaining: ${minutes}:${seconds.toString().padStart(2,'0')}`, inline: false }, // Time remaining
+                        { name: '\u200B', value: `**Total votes: ${totalVotes}**`, inline: false } // Total votes
+                    );
             } else {
                 const winner = optionsArr.reduce((a,b)=>votes[a].length >= votes[b].length ? a:b);
-                const embed = new EmbedBuilder()
-                    .setTitle(`🏆 WINNER: ${winner}`)
+                return new EmbedBuilder()
+                    .setTitle(`🏆 WINNER: ${winner}`) // Winner başlığı
                     .setColor('Blue')
-                    .setDescription('Poll has ended!')
-                    .setFooter({ text: 'Poll Ended' });
-                return embed;
+                    .setDescription('Poll has ended!');
             }
         };
 
@@ -135,8 +133,7 @@ module.exports = {
             const resultEmbed = new EmbedBuilder()
                 .setTitle(`🏆 WINNER: ${winner}`)
                 .setColor('Blue')
-                .setDescription('Poll has ended!')
-                .setFooter({ text: 'Poll Ended' });
+                .setDescription('Poll has ended!');
 
             await interaction.editReply({
                 content: null,
