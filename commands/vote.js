@@ -64,7 +64,7 @@ module.exports = {
 
             if (!ended) {
                 return new EmbedBuilder()
-                    .setTitle(`📊 ${question.toUpperCase()}`)   // Soru başlığı
+                    .setTitle(`📊 ${question.toUpperCase()}`) // Soru başlığı
                     .setColor('Blue')
                     .addFields(
                         { name: '\u200B', value: '**⚠️ You only have 2 votes, don’t missclick!**', inline: false }, // Uyarı
@@ -112,6 +112,12 @@ module.exports = {
 
             if (userVote[i.user.id].length >= 2)
                 return i.reply({ content: '🚫 You already used your 2 votes.', ephemeral: true });
+
+            // Eğer 1 oy hakkı kalmışsa ve yeni oy seçiliyorsa eski oyu sil
+            if (userVote[i.user.id].length === 1) {
+                const prev = userVote[i.user.id][0];
+                votes[prev] = votes[prev].filter(uid => uid !== i.user.id);
+            }
 
             votes[selected].push(i.user.id);
             userVote[i.user.id].push(selected);
