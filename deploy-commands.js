@@ -1,6 +1,5 @@
 const { REST, Routes } = require('discord.js');
 const fs = require('node:fs');
-const path = require('node:path');
 require('dotenv').config();
 
 const commands = [];
@@ -13,15 +12,28 @@ for (const file of commandFiles) {
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
+// BURASI ÖNEMLİ
+const guilds = [
+    process.env.GUILD_ID_1,
+    process.env.GUILD_ID_2
+].filter(Boolean);
+
 (async () => {
     try {
         console.log(`[SYSTEM] Registering ${commands.length} commands...`);
-        await rest.put(
-            Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
-            { body: commands },
-        );
-        console.log('[SYSTEM] Commands registered successfully!');
+
+        for (const guildId of guilds) {
+            await rest.put(
+                Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId),
+                { body: commands }
+            );
+
+            console.log(`✅ Loaded in guild: ${guildId}`);
+        }
+
+        console.log('[SYSTEM] Done!');
         process.exit(0);
+
     } catch (error) {
         console.error(error);
         process.exit(1);
