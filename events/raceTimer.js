@@ -6,6 +6,12 @@ const allowedChannels = [
     '1480929264693018734'
 ];
 
+// Botun tanımasını istediğimiz önemli kelimeler
+const raceKeywords = [
+    'off-season', 'host', 'room code', 'track', 'server', 
+    'sprint', 'laps', 'slipstream', 'white line', 'race mode'
+];
+
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
         if (message.author.bot) return;
@@ -13,42 +19,38 @@ module.exports = (client) => {
 
         const content = message.content.toLowerCase();
 
-        // Trigger words: message must include "time" or "zaman"
-        if (!content.includes('time') && !content.includes('zaman')) return;
+        // 1. ADIM: Mesajda kaç tane anahtar kelime geçtiğini say
+        const foundKeywords = raceKeywords.filter(word => content.includes(word));
+        
+        // Eğer 5'ten az anahtar kelime varsa, bu resmi bir duyuru değildir; iptal et.
+        if (foundKeywords.length < 5) return;
 
+        // 2. ADIM: Zamanı hesapla
         let totalMs = 0;
+        const hourRegex = /(\d+)\s*(hours?|h|saat|sa|houds?)\b/g; // "houds" typosu için de önlem aldım :)
+        const minRegex = /(\d+)\s*(minutes?|min|m|dakika|dk|d)\b/g;
 
-        // --- HOURS (matches: 1 hour, 2 hours, 1h, 1 sa, 1 saat) ---
-        const hourRegex = /(\d+)\s*(hours?|h|saat|sa)\b/g;
         let hourMatch;
         while ((hourMatch = hourRegex.exec(content)) !== null) {
             totalMs += parseInt(hourMatch[1]) * 3600 * 1000;
         }
 
-        // --- MINUTES (matches: 1 minute, 10 minutes, 10m, 10min, 10 dk, 10 dakika) ---
-        const minRegex = /(\d+)\s*(minutes?|min|m|dakika|dk|d)\b/g;
         let minMatch;
         while ((minMatch = minRegex.exec(content)) !== null) {
             totalMs += parseInt(minMatch[1]) * 60 * 1000;
         }
 
-        // If no valid time found, stop
         if (totalMs <= 0) return;
 
-        // Safety limit: Max 24 hours
-        if (totalMs > 24 * 3600 * 1000) {
-            return message.reply("Whoops! You can't set a timer for more than 24 hours. 😅");
-        }
+        console.log(`[OFF-SEASON] ${message.author.tag} tarafından resmi yarış duyurusu algılandı. Süre: ${totalMs/1000}sn`);
 
-        console.log(`[RACE TIMER] Set for ${message.author.tag}: ${totalMs / 1000} seconds.`);
-
-        // React with a clock to show the bot is tracking
-        await message.react('⏱️').catch(() => {});
+        // Botun duyuruyu onayladığını belirtmek için bir kupa emojisi ekleyelim
+        await message.react('🏆').catch(() => {});
 
         setTimeout(async () => {
             try {
-                // Final alert in English
-                await message.reply(`Ding-dong! ${message.author}, it's race time! 🏁`);
+                // Yarış duyurusuna reply atarak hatırlat
+                await message.reply(`🏁 **RACE ALERT!** The time is up! Get to the track! 🏎️💨`);
             } catch (err) {
                 console.error('[RACE TIMER ERROR]', err);
             }
