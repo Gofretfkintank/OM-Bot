@@ -13,24 +13,45 @@ module.exports = (client) => {
 
         const content = message.content.toLowerCase();
 
-        // Time satırını yakala
-        const match = content.match(/time[:\s]*in (\d+)\s*hour/);
-        const minMatch = content.match(/time[:\s]*in (\d+)\s*minute/);
+        // Trigger words: message must include "time" or "zaman"
+        if (!content.includes('time') && !content.includes('zaman')) return;
 
-        let msDelay = 0;
-        if (match) msDelay += parseInt(match[1]) * 3600 * 1000;
-        if (minMatch) msDelay += parseInt(minMatch[1]) * 60 * 1000;
+        let totalMs = 0;
 
-        if (msDelay <= 0) return;
+        // --- HOURS (matches: 1 hour, 2 hours, 1h, 1 sa, 1 saat) ---
+        const hourRegex = /(\d+)\s*(hours?|h|saat|sa)\b/g;
+        let hourMatch;
+        while ((hourMatch = hourRegex.exec(content)) !== null) {
+            totalMs += parseInt(hourMatch[1]) * 3600 * 1000;
+        }
 
-        console.log(`[RACE TIMER] ${message.author.tag} için ${msDelay/1000}s sonra ping ayarlandı.`);
+        // --- MINUTES (matches: 1 minute, 10 minutes, 10m, 10min, 10 dk, 10 dakika) ---
+        const minRegex = /(\d+)\s*(minutes?|min|m|dakika|dk|d)\b/g;
+        let minMatch;
+        while ((minMatch = minRegex.exec(content)) !== null) {
+            totalMs += parseInt(minMatch[1]) * 60 * 1000;
+        }
+
+        // If no valid time found, stop
+        if (totalMs <= 0) return;
+
+        // Safety limit: Max 24 hours
+        if (totalMs > 24 * 3600 * 1000) {
+            return message.reply("Whoops! You can't set a timer for more than 24 hours. 😅");
+        }
+
+        console.log(`[RACE TIMER] Set for ${message.author.tag}: ${totalMs / 1000} seconds.`);
+
+        // React with a clock to show the bot is tracking
+        await message.react('⏱️').catch(() => {});
 
         setTimeout(async () => {
             try {
-                await message.channel.send(`Dingdong! ${message.author} yarış zamanı! 🏁`);
+                // Final alert in English
+                await message.reply(`Ding-dong! ${message.author}, it's race time! 🏁`);
             } catch (err) {
                 console.error('[RACE TIMER ERROR]', err);
             }
-        }, msDelay);
+        }, totalMs);
     });
 };
