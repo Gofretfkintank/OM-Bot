@@ -45,7 +45,7 @@ module.exports = (client) => {
         console.log(`[OFF-SEASON] ${message.author.tag} tarafından resmi yarış duyurusu algılandı. Süre: ${totalMs/1000}sn`);
 
         // Botun duyuruyu onayladığını belirtmek için bir kupa emojisi ekleyelim
-        await message.react('🏆').catch(() => {});
+        await message.react('<:niggerbird:1478771734831173662>').catch(() => {});
 
         setTimeout(async () => {
             try {
