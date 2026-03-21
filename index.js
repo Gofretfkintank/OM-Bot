@@ -83,4 +83,6 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
+require('./events/raceTimer')(client);
+
 client.login(process.env.TOKEN);
