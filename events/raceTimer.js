@@ -19,15 +19,14 @@ module.exports = (client) => {
 
         const content = message.content.toLowerCase();
 
-        // 1. ADIM: Mesajda kaç tane anahtar kelime geçtiğini say
+        // 1. ADIM: Anahtar kelime kontrolü
         const foundKeywords = raceKeywords.filter(word => content.includes(word));
-        
-        // Eğer 5'ten az anahtar kelime varsa, bu resmi bir duyuru değildir; iptal et.
         if (foundKeywords.length < 5) return;
 
-        // 2. ADIM: Zamanı hesapla
+        // 2. ADIM: Zaman hesaplama
         let totalMs = 0;
-        const hourRegex = /(\d+)\s*(hours?|h|saat|sa|houds?)\b/g; // "houds" typosu için de önlem aldım :)
+
+        const hourRegex = /(\d+)\s*(hours?|h|saat|sa|houds?)\b/g;
         const minRegex = /(\d+)\s*(minutes?|min|m|dakika|dk|d)\b/g;
 
         let hourMatch;
@@ -42,15 +41,20 @@ module.exports = (client) => {
 
         if (totalMs <= 0) return;
 
-        console.log(`[OFF-SEASON] ${message.author.tag} tarafından resmi yarış duyurusu algılandı. Süre: ${totalMs/1000}sn`);
+        console.log(`[OFF-SEASON] ${message.author.tag} yarış duyurusu algılandı. Süre: ${totalMs/1000}sn`);
 
-        // Botun duyuruyu onayladığını belirtmek için bir kupa emojisi ekleyelim
+        // Onay emojisi
         await message.react('<:niggerbird:1478771734831173662>').catch(() => {});
 
+        // 3. ADIM: Timer + spam ping
         setTimeout(async () => {
             try {
-                // Yarış duyurusuna reply atarak hatırlat
-                await message.reply(`🏁 **RACE ALERT!** The time is up! Get to the track! 🏎️💨`);
+                for (let i = 0; i < 5; i++) {
+                    await message.reply(`🏁 ${message.author} **RACE TIME!** GET TO THE TRACK NOW! 🏎️💨`);
+                    
+                    // 1 saniye aralık (rate limit yememek için)
+                    await new Promise(res => setTimeout(res, 1000));
+                }
             } catch (err) {
                 console.error('[RACE TIMER ERROR]', err);
             }
