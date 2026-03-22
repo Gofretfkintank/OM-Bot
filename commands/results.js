@@ -17,14 +17,14 @@ module.exports = {
             option.setName('race_type')
                   .setDescription('Sprint or Grand Prix')
                   .setRequired(true))
-        .addStringOption(option =>
-            option.setName('good_battles')
-                  .setDescription('Optional comments about the race')
-                  .setRequired(false))
         .addUserOption(option =>
             option.setName('p1')
                   .setDescription('First place')
                   .setRequired(true))
+        .addStringOption(option =>
+            option.setName('good_battles')
+                  .setDescription('Optional comments about the race')
+                  .setRequired(false))
         .addUserOption(option =>
             option.setName('p2')
                   .setDescription('Second place')
