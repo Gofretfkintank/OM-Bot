@@ -33,20 +33,22 @@ client.once('ready', async () => {
     console.log(`[ONLINE] ${client.user.tag} is running! 🚀`);
 
     try {
+        // Global komutları temizle (çakışmayı önler)
         await client.application.commands.set([]);
 
+        const commandsData = client.commands.map(cmd => cmd.data.toJSON());
+
         for (const guildId of allowedGuilds) {
-            const guild = client.guilds.cache.get(guildId);
-            if (!guild) continue;
-
-            await guild.commands.set(
-                client.commands.map(cmd => cmd.data.toJSON())
-            );
-
-            console.log(`✅ Commands loaded in: ${guildId}`);
+            try {
+                // Komutları cache beklemeden direkt o sunucuya zorla kaydet
+                await client.application.commands.set(commandsData, guildId);
+                console.log(`✅ Commands successfully pushed to Guild: ${guildId}`);
+            } catch (guildErr) {
+                console.error(`❌ Failed to push commands to guild ${guildId}:`, guildErr);
+            }
         }
     } catch (err) {
-        console.error('❌ Setup error:', err);
+        console.error('❌ General setup error:', err);
     }
 });
 
@@ -131,7 +133,12 @@ client.on('interactionCreate', async interaction => {
         const msgId = parts.slice(3).join('_');
 
         const driversFile = path.join(__dirname, 'drivers.json');
-        let drivers = JSON.parse(fs.readFileSync(driversFile, 'utf8'));
+        let drivers = [];
+        
+        // Dosya kontrolü eklendi
+        if (fs.existsSync(driversFile)) {
+            drivers = JSON.parse(fs.readFileSync(driversFile, 'utf8'));
+        }
 
         const voteKey = `${msgId}_${interaction.user.id}`;
 
