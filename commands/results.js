@@ -251,7 +251,7 @@ module.exports = {
                 } catch (err) {
                     console.error('DOTY error:', err);
                 }
-            }, 10000);
+            }, 3600000);
         }
     }
 };
