@@ -33,14 +33,12 @@ client.once('ready', async () => {
     console.log(`[ONLINE] ${client.user.tag} is running! 🚀`);
 
     try {
-        // Global komutları temizle (çakışmayı önler)
         await client.application.commands.set([]);
 
         const commandsData = client.commands.map(cmd => cmd.data.toJSON());
 
         for (const guildId of allowedGuilds) {
             try {
-                // Komutları cache beklemeden direkt o sunucuya zorla kaydet
                 await client.application.commands.set(commandsData, guildId);
                 console.log(`✅ Commands successfully pushed to Guild: ${guildId}`);
             } catch (guildErr) {
@@ -124,7 +122,7 @@ client.on('interactionCreate', async interaction => {
     }
 
     // ----------------------
-    // 3. DOTY CONFIRM
+    // 3. DOTY CONFIRM (FIXED)
     // ----------------------
     else if (interaction.isButton() && interaction.customId.startsWith('confirm_doty_')) {
 
@@ -134,8 +132,7 @@ client.on('interactionCreate', async interaction => {
 
         const driversFile = path.join(__dirname, 'drivers.json');
         let drivers = [];
-        
-        // Dosya kontrolü eklendi
+
         if (fs.existsSync(driversFile)) {
             drivers = JSON.parse(fs.readFileSync(driversFile, 'utf8'));
         }
@@ -165,8 +162,8 @@ client.on('interactionCreate', async interaction => {
 
         if (!driver.voters) driver.voters = [];
 
+        // ✅ SADECE OY KAYDEDİLİR (DOTY ARTMAZ!)
         driver.voters.push(voteKey);
-        driver.doty = (driver.doty || 0) + 1;
 
         fs.writeFileSync(driversFile, JSON.stringify(drivers, null, 2));
 
