@@ -11,56 +11,85 @@ module.exports = {
         .setDescription('Show racing stats for a user')
         .addUserOption(option =>
             option.setName('user')
-                  .setDescription('The user to view stats for')
-                  .setRequired(false)),
-    
+                .setDescription('User to check')
+                .setRequired(false)
+        ),
+
     async execute(interaction) {
-        // Hedef kullanıcı
         const targetUser = interaction.options.getUser('user') || interaction.user;
 
-        // JSON oku
         let drivers;
         try {
             drivers = JSON.parse(fs.readFileSync(driversFile, 'utf8'));
-        } catch (error) {
-            return interaction.reply({ content: '❌ Veri tabanı okunamadı.', ephemeral: true });
+        } catch {
+            return interaction.reply({
+                content: '❌ Database error.',
+                ephemeral: true
+            });
         }
 
         const driver = drivers.find(d => d.userId === targetUser.id);
 
         if (!driver) {
-            return interaction.reply({ content: `❌ No stats found for **${targetUser.username}**`, ephemeral: true });
+            return interaction.reply({
+                content: `❌ No stats found for **${targetUser.username}**`,
+                ephemeral: true
+            });
         }
 
-        // Kazanma oranını hesapla (Eğer adamın hiç yarışı yoksa sıfıra bölme hatası vermemesi için kontrol ekledim)
-        const winRate = driver.races > 0 ? ((driver.wins / driver.races) * 100).toFixed(1) : 0;
+        // --------------------
+        // SAFE VALUES
+        // --------------------
+        const races = Number(driver.races) || 0;
+        const wins = Number(driver.wins) || 0;
+        const podiums = Number(driver.podiums) || 0;
+        const poles = Number(driver.poles) || 0;
+        const dnf = Number(driver.dnf) || 0;
+        const dns = Number(driver.dns) || 0;
+        const doty = Number(driver.doty) || 0;
+        const wdc = Number(driver.wdc) || 0;
+        const wcc = Number(driver.wcc) || 0;
 
-        // Çok Şık Embed Mesajı Oluştur
-        const statsEmbed = new EmbedBuilder()
-            .setColor('#E60000') // Yarış hissiyatı veren Ferrari/F1 kırmızısı
-            .setTitle(`🏎️ Racing Career: ${targetUser.username}`)
-            .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 256 })) // Sağ üste avatarı koyar
+        // --------------------
+        // CALCULATIONS
+        // --------------------
+        const winRate = races > 0 ? ((wins / races) * 100).toFixed(1) : "0.0";
+        const dnfRate = races > 0 ? ((dnf / races) * 100).toFixed(1) : "0.0";
+
+        // --------------------
+        // EMBED
+        // --------------------
+        const embed = new EmbedBuilder()
+            .setColor('#E10600')
+            .setTitle(`🏎️ ${targetUser.username}'s Racing Stats`)
+            .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 256 }))
+
             .addFields(
-                // İlk satır (Yan yana 3 sütun)
-                { name: '🏎️ Races', value: `**${driver.races}**`, inline: true },
-                { name: '🏆 Wins', value: `**${driver.wins}**`, inline: true },
-                { name: '🥇 Podiums', value: `**${driver.podiums}**`, inline: true },
-                
-                // İkinci satır (Yan yana 3 sütun)
-                { name: '💀 DNF', value: `**${driver.dnf}**`, inline: true },
-                { name: '⚡ DNS', value: `**${driver.dns}**`, inline: true },
-                { name: '✨ Win Rate', value: `**%${winRate}**`, inline: true },
+                { name: '🏁 Races', value: `**${races}**`, inline: true },
+                { name: '🏆 Wins', value: `**${wins}**`, inline: true },
+                { name: '🥇 Podiums', value: `**${podiums}**`, inline: true },
 
-                // Alt Kısım (Geniş tek satır)
-                { name: '👑 Championships', value: `WDC: **${driver.wdc}** |  WCC: **${driver.wcc}**`, inline: false }
+                { name: '🎯 Poles', value: `**${poles}**`, inline: true },
+                { name: '🌟 DOTY', value: `**${doty}**`, inline: true },
+                { name: '📊 Win Rate', value: `**%${winRate}**`, inline: true },
+
+                { name: '💀 DNF', value: `**${dnf}**`, inline: true },
+                { name: '⚡ DNS', value: `**${dns}**`, inline: true },
+                { name: '⚠️ DNF Rate', value: `**%${dnfRate}**`, inline: true },
+
+                { 
+                    name: '👑 Championships', 
+                    value: `WDC: **${wdc}**  |  WCC: **${wcc}**`, 
+                    inline: false 
+                }
             )
-            .setFooter({ 
-                text: 'Official Racing Stats', 
-                iconURL: interaction.guild ? interaction.guild.iconURL() : undefined 
-            })
-            .setTimestamp(); // En alta güncel saat ve tarihi atar
 
-        // Mesajı gönder
-        await interaction.reply({ embeds: [statsEmbed], ephemeral: false });
+            .setFooter({
+                text: 'Racing League System',
+                iconURL: interaction.guild?.iconURL() || null
+            })
+            .setTimestamp();
+
+        await interaction.reply({ embeds: [embed] });
     }
 };
