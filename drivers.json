@@ -233,8 +233,7 @@
     "doty": 0,
     "voters": []
   },
-
-{
+  {
   "userId": "795745605376933909",
   "races": 1,
   "wins": 1,
@@ -246,5 +245,18 @@
   "wcc": 0,
   "doty": 0,
   "voters": []
-}
+  },
+  {
+  "userId": "931445512920526889",
+  "races": 0,
+  "wins": 0,
+  "podiums": 0,
+  "poles": 0,
+  "dnf": 0,
+  "dns": 0,
+  "wdc": 0,
+  "wcc": 0,
+  "doty": 0,
+  "voters": []
+  }
 ]
