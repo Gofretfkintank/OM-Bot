@@ -28,6 +28,18 @@ function saveDrivers(data) {
 }
 
 // --------------------
+// HELPER (CRITICAL FIX)
+// --------------------
+function parseIds(input) {
+    if (!input) return [];
+
+    return input
+        .split(/[\s,]+/) // virgül VEYA boşluk destekler
+        .map(id => id.replace(/[<@!>]/g, '').trim())
+        .filter(id => id.length > 0);
+}
+
+// --------------------
 // COMMAND
 // --------------------
 module.exports = {
@@ -63,8 +75,8 @@ module.exports = {
         .addUserOption(opt => opt.setName('p9').setDescription('9th Place'))
         .addUserOption(opt => opt.setName('p10').setDescription('10th Place'))
 
-        .addStringOption(opt => opt.setName('dnf').setDescription('DNF drivers'))
-        .addStringOption(opt => opt.setName('dns').setDescription('DNS drivers'))
+        .addStringOption(opt => opt.setName('dnf').setDescription('DNF drivers (@user1, @user2 or IDs)'))
+        .addStringOption(opt => opt.setName('dns').setDescription('DNS drivers (@user1, @user2 or IDs)'))
         .addStringOption(opt => opt.setName('comments').setDescription('Race comments')),
 
     async execute(interaction) {
@@ -97,7 +109,7 @@ module.exports = {
             let driver = drivers.find(d => d.userId === user.id);
             if (!driver) return;
 
-            // SAFETY INIT
+            // INIT
             driver.races = Number(driver.races) || 0;
             driver.wins = Number(driver.wins) || 0;
             driver.podiums = Number(driver.podiums) || 0;
@@ -107,45 +119,41 @@ module.exports = {
             driver.dns = Number(driver.dns) || 0;
             if (!driver.voters) driver.voters = [];
 
-            // GP = race say
             if (isGP) driver.races++;
 
-            // WIN / POLE
             if (index === 0) {
                 if (isGP) driver.wins++;
                 if (isSprint) driver.poles++;
             }
 
-            // PODIUM sadece GP
             if (isGP && index <= 2) {
                 driver.podiums++;
             }
         });
 
         // --------------------
-        // DNF / DNS
+        // DNF / DNS (FIXED)
         // --------------------
-        const handleExtra = (input, type) => {
-            if (!input) return;
+        const dnfList = parseIds(interaction.options.getString('dnf'));
+        const dnsList = parseIds(interaction.options.getString('dns'));
 
-            input.split(',').forEach(id => {
-                const cleanId = id.replace(/[<@!>]/g, '').trim();
-                let driver = drivers.find(d => d.userId === cleanId);
-                if (!driver) return;
+        dnfList.forEach(id => {
+            let driver = drivers.find(d => d.userId === id);
+            if (!driver) return;
 
-                driver[type] = (Number(driver[type]) || 0) + 1;
+            driver.dnf = (Number(driver.dnf) || 0) + 1;
 
-                if (type === 'dnf' && !participantIds.includes(cleanId) && isGP) {
-                    driver.races = (Number(driver.races) || 0) + 1;
-                }
-            });
-        };
+            if (!participantIds.includes(id) && isGP) {
+                driver.races = (Number(driver.races) || 0) + 1;
+            }
+        });
 
-        const dnfInput = interaction.options.getString('dnf');
-        const dnsInput = interaction.options.getString('dns');
+        dnsList.forEach(id => {
+            let driver = drivers.find(d => d.userId === id);
+            if (!driver) return;
 
-        handleExtra(dnfInput, 'dnf');
-        handleExtra(dnsInput, 'dns');
+            driver.dns = (Number(driver.dns) || 0) + 1;
+        });
 
         saveDrivers(drivers);
 
@@ -160,22 +168,17 @@ module.exports = {
 
         let lastPos = participants.length;
 
-        const formatMention = (id) =>
-            id.trim().includes('<@') ? id.trim() : `<@${id.trim()}>`;
+        const format = id => `<@${id}>`;
 
-        if (dnfInput) {
-            dnfInput.split(',').forEach(id => {
-                lastPos++;
-                msg += `P${lastPos}: ${formatMention(id)} (DNF)\n`;
-            });
-        }
+        dnfList.forEach(id => {
+            lastPos++;
+            msg += `P${lastPos}: ${format(id)} (DNF)\n`;
+        });
 
-        if (dnsInput) {
-            dnsInput.split(',').forEach(id => {
-                lastPos++;
-                msg += `P${lastPos}: ${formatMention(id)} (DNS)\n`;
-            });
-        }
+        dnsList.forEach(id => {
+            lastPos++;
+            msg += `P${lastPos}: ${format(id)} (DNS)\n`;
+        });
 
         if (comments) {
             msg += `\n**Comments:**\n${comments}\n`;
@@ -187,6 +190,7 @@ module.exports = {
         // DOTY BUTTON
         // --------------------
         const components = [];
+
         if (isGP) {
             components.push(
                 new ActionRowBuilder().addComponents(
@@ -216,13 +220,8 @@ module.exports = {
                     let votes = [];
 
                     freshDrivers.forEach(d => {
-                        if (!d.voters) return;
-
-                        const count = d.voters.filter(v => v.startsWith(messageId)).length;
-
-                        if (count > 0) {
-                            votes.push({ userId: d.userId, count });
-                        }
+                        const count = (d.voters || []).filter(v => v.startsWith(messageId)).length;
+                        if (count > 0) votes.push({ userId: d.userId, count });
                     });
 
                     if (votes.length === 0) {
@@ -234,27 +233,19 @@ module.exports = {
                     const top = votes[0].count;
                     const winners = votes.filter(v => v.count === top);
 
-                    // DOTY POINT
                     if (winners.length === 1) {
                         const winner = freshDrivers.find(d => d.userId === winners[0].userId);
-                        if (winner) {
-                            winner.doty = (Number(winner.doty) || 0) + 1;
-                        }
+                        if (winner) winner.doty = (Number(winner.doty) || 0) + 1;
                     }
 
-                    // RESULT TEXT
-                    let text;
-                    if (winners.length === 1) {
-                        text = `<@${winners[0].userId}> wins DOTY with **${top}** votes!`;
-                    } else {
-                        text = winners.map(w => `<@${w.userId}>`).join(', ') + ` tied with **${top}** votes!`;
-                    }
+                    const text = winners.length === 1
+                        ? `<@${winners[0].userId}> wins DOTY with **${top}** votes!`
+                        : winners.map(w => `<@${w.userId}>`).join(', ') + ` tied with **${top}** votes!`;
 
                     const embed = new EmbedBuilder()
                         .setTitle('🌟 DRIVER OF THE DAY')
                         .setDescription(text)
-                        .setColor('#FFD700')
-                        .setTimestamp();
+                        .setColor('#FFD700');
 
                     await interaction.channel.send({ embeds: [embed] });
 
@@ -267,7 +258,6 @@ module.exports = {
 
                     saveDrivers(freshDrivers);
 
-                    // DISABLE BUTTON
                     await initialReply.edit({
                         components: [
                             new ActionRowBuilder().addComponents(
