@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -20,13 +20,14 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('results')
         .setDescription('Post race results and update statistics')
+        // 🔥 THIS MAKES IT STRICTLY ADMIN ONLY
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 
         .addStringOption(opt => 
             opt.setName('track')
                 .setDescription('Track name')
                 .setRequired(true)
         )
-
         .addStringOption(opt =>
             opt.setName('race_type')
                 .setDescription('Race type')
@@ -36,7 +37,6 @@ module.exports = {
                     { name: 'Sprint', value: 'sprint' }
                 )
         )
-
         .addUserOption(opt => opt.setName('p1').setDescription('1st Place').setRequired(true))
         .addUserOption(opt => opt.setName('p2').setDescription('2nd Place'))
         .addUserOption(opt => opt.setName('p3').setDescription('3rd Place'))
@@ -47,17 +47,14 @@ module.exports = {
         .addUserOption(opt => opt.setName('p8').setDescription('8th Place'))
         .addUserOption(opt => opt.setName('p9').setDescription('9th Place'))
         .addUserOption(opt => opt.setName('p10').setDescription('10th Place'))
-
         .addStringOption(opt => 
             opt.setName('dnf')
                 .setDescription('DNF drivers (comma separated)')
         )
-
         .addStringOption(opt => 
             opt.setName('dns')
                 .setDescription('DNS drivers (comma separated)')
         )
-
         .addStringOption(opt => 
             opt.setName('good_battles')
                 .setDescription('Optional race comments')
@@ -80,7 +77,7 @@ module.exports = {
 
         const participantIds = participants.map(p => p.id);
 
-        // --- STATS ---
+        // --- STATS UPDATE ---
         participants.forEach((user, index) => {
             let driver = drivers.find(d => d.userId === user.id);
             if (!driver) return;
@@ -92,7 +89,7 @@ module.exports = {
             if (index <= 2) driver.podiums = (Number(driver.podiums) || 0) + 1;
         });
 
-        // --- DNF ---
+        // --- DNF HANDLING ---
         const dnfInput = interaction.options.getString('dnf');
         if (dnfInput) {
             dnfInput.split(',').forEach(id => {
@@ -110,7 +107,7 @@ module.exports = {
             });
         }
 
-        // --- DNS ---
+        // --- DNS HANDLING ---
         const dnsInput = interaction.options.getString('dns');
         if (dnsInput) {
             dnsInput.split(',').forEach(id => {
@@ -126,7 +123,7 @@ module.exports = {
 
         saveDrivers(drivers);
 
-        // --- MESSAGE ---
+        // --- MESSAGE CONSTRUCTION ---
         let msg = `# ${track.toUpperCase()} STANDINGS\n\n**${raceType === 'gp' ? 'GRAND PRIX' : 'SPRINT'}**\n`;
 
         participants.forEach((user, i) => {
@@ -153,6 +150,7 @@ module.exports = {
             msg += `\n**Good Battles:**\n${goodBattles}\n`;
         }
 
+        // Mentions the specific role (you can change this ID if your notification role changes)
         msg += `\n<@&1452705943967105046>`;
 
         const components = [];
@@ -174,7 +172,7 @@ module.exports = {
             fetchReply: true
         });
 
-        // --- DOTY TIMER ---
+        // --- DOTY TIMER (1 HOUR) ---
         if (raceType === 'gp') {
             setTimeout(async () => {
                 try {
@@ -194,7 +192,7 @@ module.exports = {
                     });
 
                     if (votes.length === 0) {
-                        return interaction.channel.send("🏁 No votes cast.");
+                        return interaction.channel.send("🏁 Voting closed. No votes cast.");
                     }
 
                     votes.sort((a, b) => b.count - a.count);
@@ -202,7 +200,7 @@ module.exports = {
                     const topVotes = votes[0].count;
                     const winners = votes.filter(v => v.count === topVotes);
 
-                    // ✅ ONLY WINNER GETS DOTY
+                    // ONLY WINNER GETS DOTY STAT INCREASE
                     if (winners.length === 1) {
                         const winner = updatedDrivers.find(d => d.userId === winners[0].userId);
                         if (winner) {
@@ -228,7 +226,7 @@ module.exports = {
 
                     await interaction.channel.send({ embeds: [embed] });
 
-                    // CLEAN VOTERS
+                    // CLEAN UP VOTERS FOR THIS RACE
                     updatedDrivers.forEach(d => {
                         if (d.voters) {
                             d.voters = d.voters.filter(v => !v.startsWith(messageId));
@@ -251,7 +249,7 @@ module.exports = {
                 } catch (err) {
                     console.error('DOTY error:', err);
                 }
-            }, 3600000);
+            }, 3600000); // 1 Hour
         }
     }
 };
