@@ -28,13 +28,40 @@ function saveDrivers(data) {
 }
 
 // --------------------
-// HELPER (CRITICAL FIX)
+// AUTO CREATE DRIVER 🔥
+// --------------------
+function getDriver(drivers, userId) {
+    let driver = drivers.find(d => d.userId === userId);
+
+    if (!driver) {
+        driver = {
+            userId,
+            races: 0,
+            wins: 0,
+            podiums: 0,
+            poles: 0,
+            dnf: 0,
+            dns: 0,
+            wdc: 0,
+            wcc: 0,
+            doty: 0,
+            voters: []
+        };
+
+        drivers.push(driver);
+    }
+
+    return driver;
+}
+
+// --------------------
+// PARSE IDS (MULTI FIX)
 // --------------------
 function parseIds(input) {
     if (!input) return [];
 
     return input
-        .split(/[\s,]+/) // virgül VEYA boşluk destekler
+        .split(/[\s,]+/)
         .map(id => id.replace(/[<@!>]/g, '').trim())
         .filter(id => id.length > 0);
 }
@@ -75,8 +102,8 @@ module.exports = {
         .addUserOption(opt => opt.setName('p9').setDescription('9th Place'))
         .addUserOption(opt => opt.setName('p10').setDescription('10th Place'))
 
-        .addStringOption(opt => opt.setName('dnf').setDescription('DNF drivers (@user1, @user2 or IDs)'))
-        .addStringOption(opt => opt.setName('dns').setDescription('DNS drivers (@user1, @user2 or IDs)'))
+        .addStringOption(opt => opt.setName('dnf').setDescription('DNF drivers'))
+        .addStringOption(opt => opt.setName('dns').setDescription('DNS drivers'))
         .addStringOption(opt => opt.setName('comments').setDescription('Race comments')),
 
     async execute(interaction) {
@@ -106,18 +133,7 @@ module.exports = {
         // STATS UPDATE
         // --------------------
         participants.forEach((user, index) => {
-            let driver = drivers.find(d => d.userId === user.id);
-            if (!driver) return;
-
-            // INIT
-            driver.races = Number(driver.races) || 0;
-            driver.wins = Number(driver.wins) || 0;
-            driver.podiums = Number(driver.podiums) || 0;
-            driver.poles = Number(driver.poles) || 0;
-            driver.doty = Number(driver.doty) || 0;
-            driver.dnf = Number(driver.dnf) || 0;
-            driver.dns = Number(driver.dns) || 0;
-            if (!driver.voters) driver.voters = [];
+            const driver = getDriver(drivers, user.id); // 🔥 AUTO CREATE
 
             if (isGP) driver.races++;
 
@@ -132,27 +148,24 @@ module.exports = {
         });
 
         // --------------------
-        // DNF / DNS (FIXED)
+        // DNF / DNS
         // --------------------
         const dnfList = parseIds(interaction.options.getString('dnf'));
         const dnsList = parseIds(interaction.options.getString('dns'));
 
         dnfList.forEach(id => {
-            let driver = drivers.find(d => d.userId === id);
-            if (!driver) return;
+            const driver = getDriver(drivers, id); // 🔥 AUTO CREATE
 
-            driver.dnf = (Number(driver.dnf) || 0) + 1;
+            driver.dnf++;
 
             if (!participantIds.includes(id) && isGP) {
-                driver.races = (Number(driver.races) || 0) + 1;
+                driver.races++;
             }
         });
 
         dnsList.forEach(id => {
-            let driver = drivers.find(d => d.userId === id);
-            if (!driver) return;
-
-            driver.dns = (Number(driver.dns) || 0) + 1;
+            const driver = getDriver(drivers, id); // 🔥 AUTO CREATE
+            driver.dns++;
         });
 
         saveDrivers(drivers);
@@ -235,7 +248,7 @@ module.exports = {
 
                     if (winners.length === 1) {
                         const winner = freshDrivers.find(d => d.userId === winners[0].userId);
-                        if (winner) winner.doty = (Number(winner.doty) || 0) + 1;
+                        if (winner) winner.doty++;
                     }
 
                     const text = winners.length === 1
