@@ -1,9 +1,20 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { 
+    SlashCommandBuilder, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    EmbedBuilder, 
+    PermissionFlagsBits 
+} = require('discord.js');
+
 const fs = require('node:fs');
 const path = require('node:path');
 
 const driversFile = path.join(__dirname, '../drivers.json');
 
+// --------------------
+// LOAD / SAVE
+// --------------------
 function loadDrivers() {
     try {
         return JSON.parse(fs.readFileSync(driversFile, 'utf8'));
@@ -16,11 +27,13 @@ function saveDrivers(data) {
     fs.writeFileSync(driversFile, JSON.stringify(data, null, 2));
 }
 
+// --------------------
+// COMMAND
+// --------------------
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('results')
         .setDescription('Post race results and update statistics')
-        // 🔥 THIS MAKES IT STRICTLY ADMIN ONLY
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 
         .addStringOption(opt => 
@@ -28,6 +41,7 @@ module.exports = {
                 .setDescription('Track name')
                 .setRequired(true)
         )
+
         .addStringOption(opt =>
             opt.setName('race_type')
                 .setDescription('Race type')
@@ -37,6 +51,7 @@ module.exports = {
                     { name: 'Sprint', value: 'sprint' }
                 )
         )
+
         .addUserOption(opt => opt.setName('p1').setDescription('1st Place').setRequired(true))
         .addUserOption(opt => opt.setName('p2').setDescription('2nd Place'))
         .addUserOption(opt => opt.setName('p3').setDescription('3rd Place'))
@@ -47,18 +62,10 @@ module.exports = {
         .addUserOption(opt => opt.setName('p8').setDescription('8th Place'))
         .addUserOption(opt => opt.setName('p9').setDescription('9th Place'))
         .addUserOption(opt => opt.setName('p10').setDescription('10th Place'))
-        .addStringOption(opt => 
-            opt.setName('dnf')
-                .setDescription('DNF drivers (comma separated)')
-        )
-        .addStringOption(opt => 
-            opt.setName('dns')
-                .setDescription('DNS drivers (comma separated)')
-        )
-        .addStringOption(opt => 
-            opt.setName('good_battles')
-                .setDescription('Optional race comments')
-        ),
+
+        .addStringOption(opt => opt.setName('dnf').setDescription('DNF drivers'))
+        .addStringOption(opt => opt.setName('dns').setDescription('DNS drivers'))
+        .addStringOption(opt => opt.setName('comments').setDescription('Race comments')),
 
     async execute(interaction) {
         if (!interaction.channel) return;
@@ -67,8 +74,14 @@ module.exports = {
 
         const track = interaction.options.getString('track');
         const raceType = interaction.options.getString('race_type');
-        const goodBattles = interaction.options.getString('good_battles');
+        const comments = interaction.options.getString('comments');
 
+        const isGP = raceType === 'gp';
+        const isSprint = raceType === 'sprint';
+
+        // --------------------
+        // PARTICIPANTS
+        // --------------------
         const participants = [];
         for (let i = 1; i <= 10; i++) {
             const user = interaction.options.getUser(`p${i}`);
@@ -77,93 +90,112 @@ module.exports = {
 
         const participantIds = participants.map(p => p.id);
 
-        // --- STATS UPDATE ---
+        // --------------------
+        // STATS UPDATE
+        // --------------------
         participants.forEach((user, index) => {
             let driver = drivers.find(d => d.userId === user.id);
             if (!driver) return;
 
+            // SAFETY INIT
+            driver.races = Number(driver.races) || 0;
+            driver.wins = Number(driver.wins) || 0;
+            driver.podiums = Number(driver.podiums) || 0;
+            driver.poles = Number(driver.poles) || 0;
+            driver.doty = Number(driver.doty) || 0;
+            driver.dnf = Number(driver.dnf) || 0;
+            driver.dns = Number(driver.dns) || 0;
             if (!driver.voters) driver.voters = [];
 
-            driver.races = (Number(driver.races) || 0) + 1;
-            if (index === 0) driver.wins = (Number(driver.wins) || 0) + 1;
-            if (index <= 2) driver.podiums = (Number(driver.podiums) || 0) + 1;
+            // GP = race say
+            if (isGP) driver.races++;
+
+            // WIN / POLE
+            if (index === 0) {
+                if (isGP) driver.wins++;
+                if (isSprint) driver.poles++;
+            }
+
+            // PODIUM sadece GP
+            if (isGP && index <= 2) {
+                driver.podiums++;
+            }
         });
 
-        // --- DNF HANDLING ---
-        const dnfInput = interaction.options.getString('dnf');
-        if (dnfInput) {
-            dnfInput.split(',').forEach(id => {
+        // --------------------
+        // DNF / DNS
+        // --------------------
+        const handleExtra = (input, type) => {
+            if (!input) return;
+
+            input.split(',').forEach(id => {
                 const cleanId = id.replace(/[<@!>]/g, '').trim();
                 let driver = drivers.find(d => d.userId === cleanId);
                 if (!driver) return;
 
-                if (!driver.voters) driver.voters = [];
+                driver[type] = (Number(driver[type]) || 0) + 1;
 
-                driver.dnf = (Number(driver.dnf) || 0) + 1;
-
-                if (!participantIds.includes(cleanId)) {
+                if (type === 'dnf' && !participantIds.includes(cleanId) && isGP) {
                     driver.races = (Number(driver.races) || 0) + 1;
                 }
             });
-        }
+        };
 
-        // --- DNS HANDLING ---
+        const dnfInput = interaction.options.getString('dnf');
         const dnsInput = interaction.options.getString('dns');
-        if (dnsInput) {
-            dnsInput.split(',').forEach(id => {
-                const cleanId = id.replace(/[<@!>]/g, '').trim();
-                let driver = drivers.find(d => d.userId === cleanId);
-                if (!driver) return;
 
-                if (!driver.voters) driver.voters = [];
-
-                driver.dns = (Number(driver.dns) || 0) + 1;
-            });
-        }
+        handleExtra(dnfInput, 'dnf');
+        handleExtra(dnsInput, 'dns');
 
         saveDrivers(drivers);
 
-        // --- MESSAGE CONSTRUCTION ---
-        let msg = `# ${track.toUpperCase()} STANDINGS\n\n**${raceType === 'gp' ? 'GRAND PRIX' : 'SPRINT'}**\n`;
+        // --------------------
+        // MESSAGE
+        // --------------------
+        let msg = `# ${track.toUpperCase()} - ${isGP ? 'GRAND PRIX' : 'SPRINT'}\n\n`;
 
         participants.forEach((user, i) => {
-            msg += `P${i + 1}: ${user}\n`;
+            msg += `P${i + 1}: ${user}${i === 0 && isSprint ? ' ⏱️ (POLE)' : ''}\n`;
         });
 
         let lastPos = participants.length;
 
+        const formatMention = (id) =>
+            id.trim().includes('<@') ? id.trim() : `<@${id.trim()}>`;
+
         if (dnfInput) {
             dnfInput.split(',').forEach(id => {
                 lastPos++;
-                msg += `P${lastPos}: ${id.trim().includes('<@') ? id.trim() : `<@${id.trim()}>`} (DNF)\n`;
+                msg += `P${lastPos}: ${formatMention(id)} (DNF)\n`;
             });
         }
 
         if (dnsInput) {
             dnsInput.split(',').forEach(id => {
                 lastPos++;
-                msg += `P${lastPos}: ${id.trim().includes('<@') ? id.trim() : `<@${id.trim()}>`} (DNS)\n`;
+                msg += `P${lastPos}: ${formatMention(id)} (DNS)\n`;
             });
         }
 
-        if (goodBattles) {
-            msg += `\n**Good Battles:**\n${goodBattles}\n`;
+        if (comments) {
+            msg += `\n**Comments:**\n${comments}\n`;
         }
 
-        // Mentions the specific role (you can change this ID if your notification role changes)
         msg += `\n<@&1452705943967105046>`;
 
+        // --------------------
+        // DOTY BUTTON
+        // --------------------
         const components = [];
-
-        if (raceType === 'gp') {
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('vote_doty')
-                    .setLabel('Vote for Driver of the Day')
-                    .setStyle(ButtonStyle.Primary)
-                    .setEmoji('🗳️')
+        if (isGP) {
+            components.push(
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('vote_doty')
+                        .setLabel('Vote DOTY')
+                        .setStyle(ButtonStyle.Primary)
+                )
             );
-            components.push(row);
         }
 
         const initialReply = await interaction.reply({
@@ -172,84 +204,86 @@ module.exports = {
             fetchReply: true
         });
 
-        // --- DOTY TIMER (1 HOUR) ---
-        if (raceType === 'gp') {
+        // --------------------
+        // DOTY TIMER
+        // --------------------
+        if (isGP) {
             setTimeout(async () => {
                 try {
-                    let updatedDrivers = loadDrivers();
+                    let freshDrivers = loadDrivers();
                     const messageId = initialReply.id;
 
                     let votes = [];
 
-                    updatedDrivers.forEach(d => {
+                    freshDrivers.forEach(d => {
                         if (!d.voters) return;
 
-                        const raceVotes = d.voters.filter(v => v.split('_')[0] === messageId).length;
+                        const count = d.voters.filter(v => v.startsWith(messageId)).length;
 
-                        if (raceVotes > 0) {
-                            votes.push({ userId: d.userId, count: raceVotes });
+                        if (count > 0) {
+                            votes.push({ userId: d.userId, count });
                         }
                     });
 
                     if (votes.length === 0) {
-                        return interaction.channel.send("🏁 Voting closed. No votes cast.");
+                        return interaction.channel.send("🏁 No votes cast.");
                     }
 
                     votes.sort((a, b) => b.count - a.count);
 
-                    const topVotes = votes[0].count;
-                    const winners = votes.filter(v => v.count === topVotes);
+                    const top = votes[0].count;
+                    const winners = votes.filter(v => v.count === top);
 
-                    // ONLY WINNER GETS DOTY STAT INCREASE
+                    // DOTY POINT
                     if (winners.length === 1) {
-                        const winner = updatedDrivers.find(d => d.userId === winners[0].userId);
+                        const winner = freshDrivers.find(d => d.userId === winners[0].userId);
                         if (winner) {
                             winner.doty = (Number(winner.doty) || 0) + 1;
                         }
                     }
 
+                    // RESULT TEXT
                     let text;
                     if (winners.length === 1) {
-                        text = `<@${winners[0].userId}> wins DOTY with **${topVotes}** votes!`;
+                        text = `<@${winners[0].userId}> wins DOTY with **${top}** votes!`;
                     } else {
-                        text = winners.map(w => `<@${w.userId}>`).join(', ') + ` tied with **${topVotes}** votes!`;
+                        text = winners.map(w => `<@${w.userId}>`).join(', ') + ` tied with **${top}** votes!`;
                     }
-
-                    const winnerUser = await interaction.client.users.fetch(winners[0].userId);
 
                     const embed = new EmbedBuilder()
                         .setTitle('🌟 DRIVER OF THE DAY')
                         .setDescription(text)
-                        .setThumbnail(winnerUser.displayAvatarURL())
                         .setColor('#FFD700')
                         .setTimestamp();
 
                     await interaction.channel.send({ embeds: [embed] });
 
-                    // CLEAN UP VOTERS FOR THIS RACE
-                    updatedDrivers.forEach(d => {
+                    // CLEAN VOTERS
+                    freshDrivers.forEach(d => {
                         if (d.voters) {
                             d.voters = d.voters.filter(v => !v.startsWith(messageId));
                         }
                     });
 
-                    saveDrivers(updatedDrivers);
+                    saveDrivers(freshDrivers);
 
                     // DISABLE BUTTON
-                    const disabledRow = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder()
-                            .setCustomId('vote_doty')
-                            .setLabel('Voting Closed')
-                            .setStyle(ButtonStyle.Secondary)
-                            .setDisabled(true)
-                    );
-
-                    await initialReply.edit({ components: [disabledRow] });
+                    await initialReply.edit({
+                        components: [
+                            new ActionRowBuilder().addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId('vote_doty_closed')
+                                    .setLabel('Voting Closed')
+                                    .setStyle(ButtonStyle.Secondary)
+                                    .setDisabled(true)
+                            )
+                        ]
+                    });
 
                 } catch (err) {
-                    console.error('DOTY error:', err);
+                    console.error('DOTY ERROR:', err);
                 }
-            }, 3600000); // 1 Hour
+            }, 3600000);
         }
     }
 };
