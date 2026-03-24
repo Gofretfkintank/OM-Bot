@@ -1,9 +1,5 @@
 const { 
     SlashCommandBuilder, 
-    ActionRowBuilder, 
-    ButtonBuilder, 
-    ButtonStyle, 
-    EmbedBuilder, 
     PermissionFlagsBits 
 } = require('discord.js');
 
@@ -17,7 +13,25 @@ const driversFile = path.join(__dirname, '../drivers.json');
 // --------------------
 function loadDrivers() {
     try {
-        return JSON.parse(fs.readFileSync(driversFile, 'utf8'));
+        let data = JSON.parse(fs.readFileSync(driversFile, 'utf8'));
+
+        // 🔥 FIX: Normalize ALL drivers
+        data = data.map(d => ({
+            userId: String(d.userId).trim(),
+            races: Number(d.races) || 0,
+            wins: Number(d.wins) || 0,
+            podiums: Number(d.podiums) || 0,
+            poles: Number(d.poles) || 0,
+            dnf: Number(d.dnf) || 0,
+            dns: Number(d.dns) || 0,
+            wdc: Number(d.wdc) || 0,
+            wcc: Number(d.wcc) || 0,
+            doty: Number(d.doty) || 0,
+            voters: d.voters || []
+        }));
+
+        return data;
+
     } catch {
         return [];
     }
@@ -28,9 +42,11 @@ function saveDrivers(data) {
 }
 
 // --------------------
-// AUTO CREATE DRIVER 🔥
+// AUTO CREATE DRIVER 🔥 (FIXED)
 // --------------------
 function getDriver(drivers, userId) {
+    userId = String(userId).trim();
+
     let driver = drivers.find(d => d.userId === userId);
 
     if (!driver) {
@@ -55,7 +71,7 @@ function getDriver(drivers, userId) {
 }
 
 // --------------------
-// PARSE IDS (MULTI FIX)
+// PARSE IDS
 // --------------------
 function parseIds(input) {
     if (!input) return [];
@@ -77,13 +93,13 @@ module.exports = {
 
         .addStringOption(opt => 
             opt.setName('track')
-                .setDescription('Track name')
+                .setDescription('Track name') // ZORUNLU
                 .setRequired(true)
         )
 
         .addStringOption(opt =>
             opt.setName('race_type')
-                .setDescription('Race type')
+                .setDescription('Race type') // ZORUNLU
                 .setRequired(true)
                 .addChoices(
                     { name: 'Grand Prix', value: 'gp' },
@@ -102,8 +118,8 @@ module.exports = {
         .addUserOption(opt => opt.setName('p9').setDescription('9th Place'))
         .addUserOption(opt => opt.setName('p10').setDescription('10th Place'))
 
-        .addStringOption(opt => opt.setName('dnf').setDescription('DNF drivers'))
-        .addStringOption(opt => opt.setName('dns').setDescription('DNS drivers'))
+        .addStringOption(opt => opt.setName('dnf').setDescription('DNF drivers (@user or ID)'))
+        .addStringOption(opt => opt.setName('dns').setDescription('DNS drivers (@user or ID)'))
         .addStringOption(opt => opt.setName('comments').setDescription('Race comments')),
 
     async execute(interaction) {
@@ -127,13 +143,13 @@ module.exports = {
             if (user) participants.push(user);
         }
 
-        const participantIds = participants.map(p => p.id);
+        const participantIds = participants.map(p => String(p.id));
 
         // --------------------
         // STATS UPDATE
         // --------------------
         participants.forEach((user, index) => {
-            const driver = getDriver(drivers, user.id); // 🔥 AUTO CREATE
+            const driver = getDriver(drivers, user.id);
 
             if (isGP) driver.races++;
 
@@ -154,7 +170,7 @@ module.exports = {
         const dnsList = parseIds(interaction.options.getString('dns'));
 
         dnfList.forEach(id => {
-            const driver = getDriver(drivers, id); // 🔥 AUTO CREATE
+            const driver = getDriver(drivers, id);
 
             driver.dnf++;
 
@@ -164,7 +180,7 @@ module.exports = {
         });
 
         dnsList.forEach(id => {
-            const driver = getDriver(drivers, id); // 🔥 AUTO CREATE
+            const driver = getDriver(drivers, id);
             driver.dns++;
         });
 
@@ -199,94 +215,6 @@ module.exports = {
 
         msg += `\n<@&1452705943967105046>`;
 
-        // --------------------
-        // DOTY BUTTON
-        // --------------------
-        const components = [];
-
-        if (isGP) {
-            components.push(
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('vote_doty')
-                        .setLabel('Vote DOTY')
-                        .setStyle(ButtonStyle.Primary)
-                )
-            );
-        }
-
-        const initialReply = await interaction.reply({
-            content: msg,
-            components,
-            fetchReply: true
-        });
-
-        // --------------------
-        // DOTY TIMER
-        // --------------------
-        if (isGP) {
-            setTimeout(async () => {
-                try {
-                    let freshDrivers = loadDrivers();
-                    const messageId = initialReply.id;
-
-                    let votes = [];
-
-                    freshDrivers.forEach(d => {
-                        const count = (d.voters || []).filter(v => v.startsWith(messageId)).length;
-                        if (count > 0) votes.push({ userId: d.userId, count });
-                    });
-
-                    if (votes.length === 0) {
-                        return interaction.channel.send("🏁 No votes cast.");
-                    }
-
-                    votes.sort((a, b) => b.count - a.count);
-
-                    const top = votes[0].count;
-                    const winners = votes.filter(v => v.count === top);
-
-                    if (winners.length === 1) {
-                        const winner = freshDrivers.find(d => d.userId === winners[0].userId);
-                        if (winner) winner.doty++;
-                    }
-
-                    const text = winners.length === 1
-                        ? `<@${winners[0].userId}> wins DOTY with **${top}** votes!`
-                        : winners.map(w => `<@${w.userId}>`).join(', ') + ` tied with **${top}** votes!`;
-
-                    const embed = new EmbedBuilder()
-                        .setTitle('🌟 DRIVER OF THE DAY')
-                        .setDescription(text)
-                        .setColor('#FFD700');
-
-                    await interaction.channel.send({ embeds: [embed] });
-
-                    // CLEAN VOTERS
-                    freshDrivers.forEach(d => {
-                        if (d.voters) {
-                            d.voters = d.voters.filter(v => !v.startsWith(messageId));
-                        }
-                    });
-
-                    saveDrivers(freshDrivers);
-
-                    await initialReply.edit({
-                        components: [
-                            new ActionRowBuilder().addComponents(
-                                new ButtonBuilder()
-                                    .setCustomId('vote_doty_closed')
-                                    .setLabel('Voting Closed')
-                                    .setStyle(ButtonStyle.Secondary)
-                                    .setDisabled(true)
-                            )
-                        ]
-                    });
-
-                } catch (err) {
-                    console.error('DOTY ERROR:', err);
-                }
-            }, 3600000);
-        }
+        await interaction.reply({ content: msg });
     }
 };
