@@ -223,15 +223,3 @@ client.on('interactionCreate', async interaction => {
 // LOGIN
 // ----------------------
 client.login(process.env.TOKEN);
-
-// ----------------------
-// 🔥 HEALTH CHECK FIX (EKLENEN TEK ŞEY)
-// ----------------------
-require('http')
-  .createServer((req, res) => {
-    res.writeHead(200);
-    res.end('OK');
-  })
-  .listen(8000, () => {
-    console.log('Health check server running on port 8000');
-  });
