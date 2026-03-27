@@ -72,9 +72,6 @@ client.once('ready', async () => {
 // ----------------------
 client.on('interactionCreate', async interaction => {
 
-    // ======================
-    // SLASH COMMANDS
-    // ======================
     if (interaction.isChatInputCommand()) {
 
         if (!allowedGuilds.includes(interaction.guildId)) {
@@ -85,16 +82,12 @@ client.on('interactionCreate', async interaction => {
         if (!command) return;
 
         try {
-            // 🔥 MEMBER FETCH (cache-safe)
             const member = await interaction.guild.members.fetch(interaction.user.id);
 
             const isCommander = interaction.user.id === COMMANDER_ID;
             const isCoOwner = member.roles.cache.has(CO_OWNER_ROLE_ID);
             const hasFullPower = isCommander || isCoOwner;
 
-            // ----------------------
-            // VIP MODERATION BYPASS
-            // ----------------------
             const modCommands = new Set(['mute', 'timeout', 'ban', 'kick']);
 
             if (modCommands.has(interaction.commandName)) {
@@ -103,7 +96,6 @@ client.on('interactionCreate', async interaction => {
 
                 if (target) {
 
-                    // 🔥 BOT ROLE CHECK (hierarchy)
                     if (target.roles.highest.position >= interaction.guild.members.me.roles.highest.position) {
                         return interaction.reply({
                             content: '❌ I cannot act on this user (role hierarchy).',
@@ -135,9 +127,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // ======================
-    // DOTY BUTTON (LIST)
-    // ======================
     else if (interaction.isButton() && interaction.customId === 'vote_doty') {
 
         try {
@@ -177,9 +166,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // ======================
-    // DOTY CONFIRM
-    // ======================
     else if (interaction.isButton() && interaction.customId.startsWith('confirm_doty_')) {
 
         try {
@@ -196,7 +182,6 @@ client.on('interactionCreate', async interaction => {
 
             const voteKey = `${msgId}_${interaction.user.id}`;
 
-            // 🔥 GLOBAL ANTI SPAM
             const alreadyVoted = drivers.some(d =>
                 d.voters && d.voters.includes(voteKey)
             );
@@ -221,7 +206,6 @@ client.on('interactionCreate', async interaction => {
 
             driver.voters.push(voteKey);
 
-            // 🔥 SAFE WRITE
             fs.writeFileSync(driversFile, JSON.stringify(drivers, null, 2));
 
             await interaction.update({
@@ -239,3 +223,15 @@ client.on('interactionCreate', async interaction => {
 // LOGIN
 // ----------------------
 client.login(process.env.TOKEN);
+
+// ----------------------
+// 🔥 HEALTH CHECK FIX (EKLENEN TEK ŞEY)
+// ----------------------
+require('http')
+  .createServer((req, res) => {
+    res.writeHead(200);
+    res.end('OK');
+  })
+  .listen(8000, () => {
+    console.log('Health check server running on port 8000');
+  });
