@@ -21,13 +21,11 @@ module.exports = (client) => {
         console.log('Channel:', message.channel.id);
         console.log('Content:', message.content);
 
-        // Bot mesajı mı
         if (message.author.bot) {
             console.log('❌ Bot mesajı, skip');
             return;
         }
 
-        // Kanal kontrolü
         if (!allowedChannels.includes(message.channel.id)) {
             console.log('❌ Kanal izinli değil');
             return;
@@ -37,7 +35,6 @@ module.exports = (client) => {
 
         const content = message.content.toLowerCase();
 
-        // Keyword kontrolü
         const foundKeywords = raceKeywords.filter(word => content.includes(word));
 
         console.log('🔍 Bulunan keywordler:', foundKeywords);
@@ -50,7 +47,6 @@ module.exports = (client) => {
 
         console.log('✅ Keyword kontrol geçti');
 
-        // Zaman hesaplama
         let totalMs = 0;
 
         const hourRegex = /(\d+)\s*(hours?|h|saat|sa)\b/g;
@@ -79,18 +75,10 @@ module.exports = (client) => {
 
         console.log(`✅ Timer kuruluyor: ${totalMs / 1000} saniye`);
 
-        // EMOJI TEST
+        // ✅ SADECE CUSTOM EMOJI
         try {
-            console.log('😀 Emoji deneniyor...');
-            
-            // Önce normal emoji test
-            await message.react('✅');
-            console.log('✅ Normal emoji başarılı');
-
-            // Custom emoji test (ID ile dene)
             await message.react('1478771734831173662');
-            console.log('✅ Custom emoji başarılı');
-
+            console.log('✅ Custom emoji atıldı');
         } catch (err) {
             console.error('❌ REACT ERROR:', err);
         }
