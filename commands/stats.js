@@ -1,3 +1,4 @@
+// commands/stats.js
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -16,29 +17,30 @@ module.exports = {
         ),
 
     async execute(interaction) {
+
+        // 🔥 KRİTİK SATIR (3 saniye fix)
+        await interaction.deferReply();
+
         const targetUser = interaction.options.getUser('user') || interaction.user;
 
         let drivers;
         try {
             drivers = JSON.parse(fs.readFileSync(driversFile, 'utf8'));
         } catch (err) {
-            return interaction.reply({
-                content: '❌ Database error.',
-                flags: 64
+            return interaction.editReply({
+                content: '❌ Database error.'
             });
         }
 
-        // 🔥 BURASI FIX
+        // 🔥 SENİN ANA BUG BURDAYDI (find değil!)
         const driver = drivers[targetUser.id];
 
         if (!driver) {
-            return interaction.reply({
-                content: `❌ No stats found for ${targetUser.username}`,
-                flags: 64
+            return interaction.editReply({
+                content: `❌ No stats found for ${targetUser.username}`
             });
         }
 
-        // SAFE VALUES
         const races = Number(driver.races) || 0;
         const wins = Number(driver.wins) || 0;
         const podiums = Number(driver.podiums) || 0;
@@ -82,6 +84,7 @@ module.exports = {
             })
             .setTimestamp();
 
-        await interaction.reply({ embeds: [embed] });
+        // 🔥 ARTIK reply YOK
+        await interaction.editReply({ embeds: [embed] });
     }
 };
