@@ -258,5 +258,31 @@
   "wcc": 0,
   "doty": 0,
   "voters": []
+  },
+  {
+  "userId": "1380876316672397372",
+  "races": 0,
+  "wins": 0,
+  "podiums": 0,
+  "poles": 0,
+  "dnf": 0,
+  "dns": 0,
+  "wdc": 0,
+  "wcc": 0,
+  "doty": 0,
+  "voters": []
+  },
+  {
+  "userId": "1470095392422232076",
+  "races": 0,
+  "wins": 0,
+  "podiums": 0,
+  "poles": 0,
+  "dnf": 0,
+  "dns": 0,
+  "wdc": 0,
+  "wcc": 0,
+  "doty": 0,
+  "voters": []
   }
 ]
