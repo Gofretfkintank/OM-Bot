@@ -15,11 +15,28 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('dotyvote')
         .setDescription('Start DOTY vote')
-        .addUserOption(opt => opt.setName('p1').setRequired(true))
-        .addUserOption(opt => opt.setName('p2'))
-        .addUserOption(opt => opt.setName('p3'))
-        .addUserOption(opt => opt.setName('p4'))
-        .addUserOption(opt => opt.setName('p5')),
+
+        .addUserOption(opt => 
+            opt.setName('p1')
+                .setDescription('Driver 1')
+                .setRequired(true)
+        )
+        .addUserOption(opt => 
+            opt.setName('p2')
+                .setDescription('Driver 2')
+        )
+        .addUserOption(opt => 
+            opt.setName('p3')
+                .setDescription('Driver 3')
+        )
+        .addUserOption(opt => 
+            opt.setName('p4')
+                .setDescription('Driver 4')
+        )
+        .addUserOption(opt => 
+            opt.setName('p5')
+                .setDescription('Driver 5')
+        ),
 
     async execute(interaction) {
 
@@ -69,7 +86,7 @@ module.exports = {
             await i.reply({ content: 'Vote counted', ephemeral: true });
         });
 
-        collector.on('end', () => {
+        collector.on('end', async () => {
 
             let max = 0;
             let winner = null;
@@ -96,6 +113,11 @@ module.exports = {
             drivers[winner].doty++;
 
             fs.writeFileSync(driversPath, JSON.stringify(drivers, null, 2));
+
+            // 🔥 sonucu mesaj olarak da at (ekstra iyileştirme)
+            await interaction.followUp({
+                content: `🏆 Winner: <@${winner}> with ${max} votes!`
+            });
         });
     }
 };
