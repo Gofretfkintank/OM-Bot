@@ -13,11 +13,11 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('dotyvote')
         .setDescription('Start DOTY vote')
-        .addUserOption(opt => opt.setName('p1').setRequired(true))
-        .addUserOption(opt => opt.setName('p2'))
-        .addUserOption(opt => opt.setName('p3'))
-        .addUserOption(opt => opt.setName('p4'))
-        .addUserOption(opt => opt.setName('p5')),
+        .addUserOption(opt => opt.setName('p1').setDescription('Player 1').setRequired(true))
+        .addUserOption(opt => opt.setName('p2').setDescription('Player 2'))
+        .addUserOption(opt => opt.setName('p3').setDescription('Player 3'))
+        .addUserOption(opt => opt.setName('p4').setDescription('Player 4'))
+        .addUserOption(opt => opt.setName('p5').setDescription('Player 5')),
 
     async execute(interaction) {
 
@@ -87,7 +87,8 @@ module.exports = {
                 drivers[winner] = {
                     races: 0, wins: 0, podiums: 0,
                     poles: 0, dnf: 0, dns: 0,
-                    wdc: 0, wcc: 0, doty: 0
+                    wdc: 0, wcc: 0, doty: 0,
+                    voters: []
                 };
             }
 
