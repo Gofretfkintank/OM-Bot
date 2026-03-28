@@ -15,7 +15,6 @@ function loadDrivers() {
     try {
         let data = JSON.parse(fs.readFileSync(driversFile, 'utf8'));
 
-        // 🔥 FIX: Normalize ALL drivers
         data = data.map(d => ({
             userId: String(d.userId).trim(),
             races: Number(d.races) || 0,
@@ -42,7 +41,7 @@ function saveDrivers(data) {
 }
 
 // --------------------
-// AUTO CREATE DRIVER 🔥 (FIXED)
+// AUTO CREATE DRIVER
 // --------------------
 function getDriver(drivers, userId) {
     userId = String(userId).trim();
@@ -93,13 +92,13 @@ module.exports = {
 
         .addStringOption(opt => 
             opt.setName('track')
-                .setDescription('Track name') // ZORUNLU
+                .setDescription('Track name')
                 .setRequired(true)
         )
 
         .addStringOption(opt =>
             opt.setName('race_type')
-                .setDescription('Race type') // ZORUNLU
+                .setDescription('Race type')
                 .setRequired(true)
                 .addChoices(
                     { name: 'Grand Prix', value: 'gp' },
@@ -126,6 +125,9 @@ module.exports = {
         if (!interaction.channel) return;
 
         let drivers = loadDrivers();
+
+        // 🔥 voters reset (her GP sonrası temiz)
+        drivers.forEach(d => d.voters = []);
 
         const track = interaction.options.getString('track');
         const raceType = interaction.options.getString('race_type');
@@ -187,6 +189,18 @@ module.exports = {
         saveDrivers(drivers);
 
         // --------------------
+        // FORMAT (FIX 🔥)
+        // --------------------
+        const format = async (id) => {
+            try {
+                const user = await interaction.client.users.fetch(id);
+                return `<@${id}>`;
+            } catch {
+                return `Unknown(${id})`;
+            }
+        };
+
+        // --------------------
         // MESSAGE
         // --------------------
         let msg = `# ${track.toUpperCase()} - ${isGP ? 'GRAND PRIX' : 'SPRINT'}\n\n`;
@@ -197,17 +211,15 @@ module.exports = {
 
         let lastPos = participants.length;
 
-        const format = id => `<@${id}>`;
-
-        dnfList.forEach(id => {
+        for (const id of dnfList) {
             lastPos++;
-            msg += `P${lastPos}: ${format(id)} (DNF)\n`;
-        });
+            msg += `P${lastPos}: ${await format(id)} (DNF)\n`;
+        }
 
-        dnsList.forEach(id => {
+        for (const id of dnsList) {
             lastPos++;
-            msg += `P${lastPos}: ${format(id)} (DNS)\n`;
-        });
+            msg += `P${lastPos}: ${await format(id)} (DNS)\n`;
+        }
 
         if (comments) {
             msg += `\n**Comments:**\n${comments}\n`;
@@ -216,5 +228,28 @@ module.exports = {
         msg += `\n<@&1452705943967105046>`;
 
         await interaction.reply({ content: msg });
+
+        // --------------------
+        // DOTY VOTING (ONLY GP 🔥)
+        // --------------------
+        if (isGP) {
+            const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+
+            const row = new ActionRowBuilder();
+
+            participants.forEach(user => {
+                row.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`doty_${user.id}`)
+                        .setLabel(user.username)
+                        .setStyle(ButtonStyle.Primary)
+                );
+            });
+
+            await interaction.followUp({
+                content: '⭐ Vote for Driver of the Day!',
+                components: [row]
+            });
+        }
     }
 };
