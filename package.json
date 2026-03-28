@@ -1,17 +1,14 @@
 {
   "name": "om-bot",
   "version": "2.0.0",
-  "description": "Discord bot",
+  "description": "High-performance modular Discord bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "build": "npm install"
+    "deploy": "node deploy-commands.js"
   },
   "dependencies": {
-    "discord.js": "^14.25.1",
-    "dotenv": "^16.6.1"
-  },
-  "engines": {
-    "node": "18.x"
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.3.1"
   }
 }
