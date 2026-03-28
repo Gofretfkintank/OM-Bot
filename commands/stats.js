@@ -6,9 +6,10 @@ const driversPath = './drivers.json';
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('stats')
-        .setDescription('Show stats')
+        .setDescription('Show racing stats')
         .addUserOption(opt =>
-            opt.setName('user').setRequired(false)
+            opt.setName('user')
+                .setDescription('User to check')
         ),
 
     async execute(interaction) {
