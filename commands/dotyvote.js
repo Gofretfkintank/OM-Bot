@@ -10,15 +10,77 @@ const fs = require('fs');
 
 const driversPath = './drivers.json';
 
-// Helper functions for DB management
-const loadDrivers = () => JSON.parse(fs.readFileSync(driversPath, 'utf8'));
-const saveDrivers = (data) => fs.writeFileSync(driversPath, JSON.stringify(data, null, 2));
+// --------------------
+// LOAD / SAVE
+// --------------------
+const loadDrivers = () => {
+    try {
+        let data = JSON.parse(fs.readFileSync(driversPath, 'utf8'));
 
+        return data.map(d => ({
+            userId: String(d.userId).trim(),
+            races: Number(d.races) || 0,
+            wins: Number(d.wins) || 0,
+            podiums: Number(d.podiums) || 0,
+            poles: Number(d.poles) || 0,
+            dnf: Number(d.dnf) || 0,
+            dns: Number(d.dns) || 0,
+            wdc: Number(d.wdc) || 0,
+            wcc: Number(d.wcc) || 0,
+            doty: Number(d.doty) || 0,
+            voters: Array.isArray(d.voters) ? d.voters : []
+        }));
+    } catch {
+        return [];
+    }
+};
+
+const saveDrivers = (data) => {
+    fs.writeFileSync(driversPath, JSON.stringify(data, null, 2));
+};
+
+// --------------------
+// GET OR CREATE DRIVER
+// --------------------
+function getDriver(drivers, userId) {
+    userId = String(userId).trim();
+
+    let driver = drivers.find(d => d.userId === userId);
+
+    if (!driver) {
+        driver = {
+            userId,
+            races: 0,
+            wins: 0,
+            podiums: 0,
+            poles: 0,
+            dnf: 0,
+            dns: 0,
+            wdc: 0,
+            wcc: 0,
+            doty: 0,
+            voters: []
+        };
+        drivers.push(driver);
+    }
+
+    return driver;
+}
+
+// --------------------
+// COMMAND
+// --------------------
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('dotyvote')
         .setDescription('Starts a 1-hour Driver of the Day vote.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+
+        .addRoleOption(opt =>
+            opt.setName('ping_role')
+                .setDescription('Role to ping when vote ends')
+        )
+
         .addUserOption(opt => opt.setName('p1').setDescription('Driver 1').setRequired(true))
         .addUserOption(opt => opt.setName('p2').setDescription('Driver 2'))
         .addUserOption(opt => opt.setName('p3').setDescription('Driver 3'))
@@ -38,9 +100,12 @@ module.exports = {
     async execute(interaction) {
         const participants = [];
         const seenIds = new Set();
-        const voteCountMap = new Map(); // Store votes in RAM during the hour
+        const voteCountMap = new Map();
+        const pingRole = interaction.options.getRole('ping_role');
 
-        // 1. Filter out duplicates and initialize vote map
+        // --------------------
+        // PARTICIPANTS
+        // --------------------
         for (let i = 1; i <= 15; i++) {
             const user = interaction.options.getUser(`p${i}`);
             if (user && !seenIds.has(user.id)) {
@@ -50,15 +115,24 @@ module.exports = {
             }
         }
 
-        // 2. Build the UI components (Buttons)
+        if (participants.length === 0) {
+            return interaction.reply({ content: 'No participants!', ephemeral: true });
+        }
+
+        // --------------------
+        // BUTTONS (FAST FIX)
+        // --------------------
         const rows = [];
         let currentRow = new ActionRowBuilder();
 
         participants.forEach((user, index) => {
+            // ⚡ fetch yok → timeout fix
+            const displayName = user.globalName || user.username;
+
             currentRow.addComponents(
                 new ButtonBuilder()
                     .setCustomId(`doty_${user.id}`)
-                    .setLabel(user.username.slice(0, 20))
+                    .setLabel(displayName.slice(0, 20))
                     .setStyle(ButtonStyle.Primary)
             );
 
@@ -70,77 +144,96 @@ module.exports = {
 
         if (currentRow.components.length > 0) rows.push(currentRow);
 
+        // --------------------
+        // TIME
+        // --------------------
+        const endTime = Math.floor((Date.now() + 3600000) / 1000);
+        const mentionList = participants.map(p => `<@${p.id}>`).join(', ');
+
         const voteMsg = await interaction.reply({
-            content: '⭐ **Driver of the Day (DOTY) Voting is OPEN!**\nTime remaining: **1 Hour**',
+            content: `⭐ **DOTY Voting OPEN!**\n⏳ Ends: <t:${endTime}:R>\n\n👥 ${mentionList}`,
             components: rows,
             fetchReply: true
         });
 
-        // 3. Setup the Collector for 1 hour
+        // --------------------
+        // COLLECTOR (FILTER FIX)
+        // --------------------
         const collector = voteMsg.createMessageComponentCollector({
             componentType: ComponentType.Button,
-            time: 3600000 // 1 Hour in ms
+            time: 3600000,
+            filter: i => i.customId.startsWith('doty_')
         });
 
-        const userVoters = new Set(); // Track unique voters
+        const userVoters = new Set();
 
         collector.on('collect', async i => {
             const votedId = i.customId.split('_')[1];
 
             if (userVoters.has(i.user.id)) {
-                return i.reply({ content: '⚠️ You have already cast your vote!', ephemeral: true });
+                return i.reply({ content: '⚠️ You already voted!', ephemeral: true });
             }
 
             userVoters.add(i.user.id);
-            voteCountMap.set(votedId, voteCountMap.get(votedId) + 1);
 
-            await i.reply({ content: `✅ Vote recorded for <@${votedId}>!`, ephemeral: true });
+            voteCountMap.set(
+                votedId,
+                (voteCountMap.get(votedId) || 0) + 1
+            );
+
+            await i.reply({
+                content: `✅ Vote recorded for <@${votedId}>!`,
+                ephemeral: true
+            });
         });
 
+        // --------------------
+        // END
+        // --------------------
         collector.on('end', async () => {
-            let winnerId = null;
             let maxVotes = 0;
+            let winners = [];
 
-            // Determine the winner
             for (const [id, count] of voteCountMap) {
                 if (count > maxVotes) {
                     maxVotes = count;
-                    winnerId = id;
+                    winners = [id];
+                } else if (count === maxVotes && count > 0) {
+                    winners.push(id);
                 }
             }
 
-            // Update drivers.json only if there's a winner
-            if (winnerId) {
-                const drivers = loadDrivers();
-                let driver = drivers.find(d => d.userId === winnerId);
+            let drivers = loadDrivers();
 
-                if (driver) {
-                    driver.doty = (driver.doty || 0) + 1;
-                } else {
-                    // If driver doesn't exist in DB, create a new entry
-                    drivers.push({
-                        userId: winnerId,
-                        races: 0, wins: 0, podiums: 0, poles: 0, 
-                        dnf: 0, dns: 0, wdc: 0, wcc: 0,
-                        doty: 1
-                    });
-                }
+            if (winners.length > 0) {
+                winners.forEach(id => {
+                    let driver = getDriver(drivers, id);
+                    driver.doty += 1;
+                });
                 saveDrivers(drivers);
             }
 
-            // Disable all buttons after voting ends
             const disabledRows = rows.map(row => {
                 const newRow = ActionRowBuilder.from(row);
                 newRow.components.forEach(btn => btn.setDisabled(true));
                 return newRow;
             });
 
-            const finalResult = winnerId 
-                ? `🏆 **DOTY Winner:** <@${winnerId}> with **${maxVotes}** votes!`
-                : '❌ Voting ended. No votes were cast.';
+            let resultText = '';
+
+            if (winners.length === 0) {
+                resultText = '❌ No votes.';
+            } else if (winners.length === 1) {
+                resultText = `🏆 Winner: <@${winners[0]}> with **${maxVotes}** votes!`;
+            } else {
+                const mentions = winners.map(id => `<@${id}>`).join(', ');
+                resultText = `⚖️ Tie: ${mentions} (**${maxVotes} votes**)`;
+            }
+
+            const rolePing = pingRole ? `\n${pingRole}` : '';
 
             await voteMsg.edit({
-                content: `⭐ **Voting Closed!**\n\n${finalResult}`,
+                content: `⭐ **Voting Closed!**\n\n${resultText}${rolePing}`,
                 components: disabledRows
             });
         });
