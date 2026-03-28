@@ -76,12 +76,14 @@ module.exports = {
         .setDescription('Starts a 1-hour Driver of the Day vote.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 
-        .addRoleOption(opt =>
-            opt.setName('ping_role')
-                .setDescription('Role to ping when vote ends')
+        // REQUIRED
+        .addUserOption(opt => 
+            opt.setName('p1')
+                .setDescription('Driver 1')
+                .setRequired(true)
         )
 
-        .addUserOption(opt => opt.setName('p1').setDescription('Driver 1').setRequired(true))
+        // OPTIONAL USERS
         .addUserOption(opt => opt.setName('p2').setDescription('Driver 2'))
         .addUserOption(opt => opt.setName('p3').setDescription('Driver 3'))
         .addUserOption(opt => opt.setName('p4').setDescription('Driver 4'))
@@ -95,7 +97,13 @@ module.exports = {
         .addUserOption(opt => opt.setName('p12').setDescription('Driver 12'))
         .addUserOption(opt => opt.setName('p13').setDescription('Driver 13'))
         .addUserOption(opt => opt.setName('p14').setDescription('Driver 14'))
-        .addUserOption(opt => opt.setName('p15').setDescription('Driver 15')),
+        .addUserOption(opt => opt.setName('p15').setDescription('Driver 15'))
+
+        // ROLE
+        .addRoleOption(opt =>
+            opt.setName('ping_role')
+                .setDescription('Role to ping when vote ends')
+        ),
 
     async execute(interaction) {
         const participants = [];
@@ -120,13 +128,12 @@ module.exports = {
         }
 
         // --------------------
-        // BUTTONS (FAST FIX)
+        // BUTTONS
         // --------------------
         const rows = [];
         let currentRow = new ActionRowBuilder();
 
         participants.forEach((user, index) => {
-            // ⚡ fetch yok → timeout fix
             const displayName = user.globalName || user.username;
 
             currentRow.addComponents(
@@ -145,7 +152,7 @@ module.exports = {
         if (currentRow.components.length > 0) rows.push(currentRow);
 
         // --------------------
-        // TIME
+        // START MESSAGE
         // --------------------
         const endTime = Math.floor((Date.now() + 3600000) / 1000);
         const mentionList = participants.map(p => `<@${p.id}>`).join(', ');
@@ -157,7 +164,7 @@ module.exports = {
         });
 
         // --------------------
-        // COLLECTOR (FILTER FIX)
+        // COLLECTOR
         // --------------------
         const collector = voteMsg.createMessageComponentCollector({
             componentType: ComponentType.Button,
@@ -191,6 +198,8 @@ module.exports = {
         // END
         // --------------------
         collector.on('end', async () => {
+            const totalVotes = Array.from(voteCountMap.values()).reduce((a, b) => a + b, 0);
+
             let maxVotes = 0;
             let winners = [];
 
@@ -203,6 +212,8 @@ module.exports = {
                 }
             }
 
+            if (maxVotes === 0) winners = [];
+
             let drivers = loadDrivers();
 
             if (winners.length > 0) {
@@ -213,21 +224,33 @@ module.exports = {
                 saveDrivers(drivers);
             }
 
+            // ✅ SAFE DISABLE
             const disabledRows = rows.map(row => {
-                const newRow = ActionRowBuilder.from(row);
-                newRow.components.forEach(btn => btn.setDisabled(true));
+                const newRow = new ActionRowBuilder();
+                row.components.forEach(btn => {
+                    newRow.addComponents(
+                        ButtonBuilder.from(btn).setDisabled(true)
+                    );
+                });
                 return newRow;
             });
 
+            // RESULT TEXT
             let resultText = '';
 
             if (winners.length === 0) {
-                resultText = '❌ No votes.';
-            } else if (winners.length === 1) {
-                resultText = `🏆 Winner: <@${winners[0]}> with **${maxVotes}** votes!`;
+                resultText = '❌ No votes recorded.';
             } else {
-                const mentions = winners.map(id => `<@${id}>`).join(', ');
-                resultText = `⚖️ Tie: ${mentions} (**${maxVotes} votes**)`;
+                const percentage = totalVotes > 0
+                    ? ((maxVotes / totalVotes) * 100).toFixed(1)
+                    : 0;
+
+                if (winners.length === 1) {
+                    resultText = `🏆 **Winner:** <@${winners[0]}> with **${maxVotes}** votes (%${percentage})!`;
+                } else {
+                    const mentions = winners.map(id => `<@${id}>`).join(', ');
+                    resultText = `⚖️ **Tie:** ${mentions} (**${maxVotes}** votes each - %${percentage})`;
+                }
             }
 
             const rolePing = pingRole ? `\n${pingRole}` : '';
