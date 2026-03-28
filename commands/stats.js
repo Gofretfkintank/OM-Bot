@@ -27,7 +27,7 @@ module.exports = {
             });
         }
 
-        // 🔥 BURASI FIX
+        // ✅ FIX BURASI
         const driver = drivers[targetUser.id];
 
         if (!driver) {
@@ -37,7 +37,6 @@ module.exports = {
             });
         }
 
-        // SAFE VALUES
         const races = Number(driver.races) || 0;
         const wins = Number(driver.wins) || 0;
         const podiums = Number(driver.podiums) || 0;
@@ -48,16 +47,13 @@ module.exports = {
         const wdc = Number(driver.wdc) || 0;
         const wcc = Number(driver.wcc) || 0;
 
-        // CALCULATIONS
         const winRate = races > 0 ? ((wins / races) * 100).toFixed(1) : "0.0";
         const dnfRate = races > 0 ? ((dnf / races) * 100).toFixed(1) : "0.0";
 
-        // EMBED (ESKİ UI AYNEN)
         const embed = new EmbedBuilder()
             .setColor('#E10600')
             .setTitle(`🏎️ ${targetUser.username}'s Racing Stats`)
             .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 256 }))
-
             .addFields(
                 { name: '🏁 Races', value: `**${races}**`, inline: true },
                 { name: '🏆 Wins', value: `**${wins}**`, inline: true },
@@ -71,13 +67,12 @@ module.exports = {
                 { name: '⚡ DNS', value: `**${dns}**`, inline: true },
                 { name: '⚠️ DNF Rate', value: `**%${dnfRate}**`, inline: true },
 
-                { 
-                    name: '👑 Championships', 
-                    value: `WDC: **${wdc}**  |  WCC: **${wcc}**`, 
-                    inline: false 
+                {
+                    name: '👑 Championships',
+                    value: `WDC: **${wdc}**  |  WCC: **${wcc}**`,
+                    inline: false
                 }
             )
-
             .setFooter({
                 text: 'Racing League System',
                 iconURL: interaction.guild?.iconURL() || null
