@@ -1,12 +1,10 @@
 // events/raceTimer.js
+
 const allowedChannels = [
-    // Ana server kanalları
     '1452925248973443072',    
     '1452925110037118986',
     '1453103992514019499',
     '1480929264693018734',
-
-    // Test server kanalı
     '1475519196367421503'
 ];
 
@@ -17,47 +15,101 @@ const raceKeywords = [
 
 module.exports = (client) => {
     client.on('messageCreate', async (message) => {
-        if (message.author.bot) return;
-        if (!allowedChannels.includes(message.channel.id)) return;
+
+        console.log('\n====== YENİ MESAJ ======');
+        console.log('Author:', message.author.tag);
+        console.log('Channel:', message.channel.id);
+        console.log('Content:', message.content);
+
+        // Bot mesajı mı
+        if (message.author.bot) {
+            console.log('❌ Bot mesajı, skip');
+            return;
+        }
+
+        // Kanal kontrolü
+        if (!allowedChannels.includes(message.channel.id)) {
+            console.log('❌ Kanal izinli değil');
+            return;
+        }
+
+        console.log('✅ Kanal uygun');
 
         const content = message.content.toLowerCase();
 
-        // Anahtar kelime kontrolü
+        // Keyword kontrolü
         const foundKeywords = raceKeywords.filter(word => content.includes(word));
-        if (foundKeywords.length < 5) return;
+
+        console.log('🔍 Bulunan keywordler:', foundKeywords);
+        console.log(`🔢 Keyword sayısı: ${foundKeywords.length}`);
+
+        if (foundKeywords.length < 5) {
+            console.log('❌ Yeterli keyword yok, işlem iptal');
+            return;
+        }
+
+        console.log('✅ Keyword kontrol geçti');
 
         // Zaman hesaplama
         let totalMs = 0;
-        const hourRegex = /(\d+)\s*(hours?|h|saat|sa|houds?)\b/g;
-        const minRegex = /(\d+)\s*(minutes?|min|m|dakika|dk|d)\b/g;
+
+        const hourRegex = /(\d+)\s*(hours?|h|saat|sa)\b/g;
+        const minRegex = /(\d+)\s*(minutes?|min|m|dakika|dk)\b/g;
 
         let hourMatch;
         while ((hourMatch = hourRegex.exec(content)) !== null) {
-            totalMs += parseInt(hourMatch[1]) * 3600 * 1000;
+            const val = parseInt(hourMatch[1]);
+            console.log(`⏱ Saat bulundu: ${val}`);
+            totalMs += val * 3600 * 1000;
         }
 
         let minMatch;
         while ((minMatch = minRegex.exec(content)) !== null) {
-            totalMs += parseInt(minMatch[1]) * 60 * 1000;
+            const val = parseInt(minMatch[1]);
+            console.log(`⏱ Dakika bulundu: ${val}`);
+            totalMs += val * 60 * 1000;
         }
 
-        if (totalMs <= 0) return;
+        console.log(`⏱ Toplam süre(ms): ${totalMs}`);
 
-        console.log(`[OFF-SEASON] ${message.author.tag} yarış duyurusu algılandı. Süre: ${totalMs/1000}sn`);
+        if (totalMs <= 0) {
+            console.log('❌ Süre bulunamadı, iptal');
+            return;
+        }
 
-        // Onay emojisi
-        await message.react('<:niggerbird:1478771734831173662>').catch(() => {});
+        console.log(`✅ Timer kuruluyor: ${totalMs / 1000} saniye`);
 
-        // Timer + 5 kere ping art arda (1 saniye aralık)
+        // EMOJI TEST
+        try {
+            console.log('😀 Emoji deneniyor...');
+            
+            // Önce normal emoji test
+            await message.react('✅');
+            console.log('✅ Normal emoji başarılı');
+
+            // Custom emoji test (ID ile dene)
+            await message.react('1478771734831173662');
+            console.log('✅ Custom emoji başarılı');
+
+        } catch (err) {
+            console.error('❌ REACT ERROR:', err);
+        }
+
+        // TIMER
         setTimeout(async () => {
+            console.log('🏁 TIMER BİTTİ, mesaj gönderiliyor');
+
             try {
                 for (let i = 0; i < 5; i++) {
                     await message.reply(`🏁 ${message.author} **RACE TIME!** GET TO THE TRACK NOW! 🏎️💨`);
+                    console.log(`📢 Ping ${i + 1}`);
                     await new Promise(res => setTimeout(res, 1000));
                 }
             } catch (err) {
-                console.error('[OFF-SEASON RACE TIMER ERROR]', err);
+                console.error('❌ TIMER ERROR:', err);
             }
+
         }, totalMs);
+
     });
 };
