@@ -1,4 +1,3 @@
-// commands/stats.js
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -8,11 +7,11 @@ const driversFile = path.join(__dirname, '../drivers.json');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('stats')
-        .setDescription('Show racing statistics') // 🔥 BURAYI SABİT VE STRING TUT
+        .setDescription('Show racing statistics')
         .addUserOption(option =>
             option
                 .setName('user')
-                .setDescription('Select a user') // 🔥 BURASI DA STRING OLMAK ZORUNDA
+                .setDescription('Select a user')
                 .setRequired(false)
         ),
 
@@ -25,16 +24,17 @@ module.exports = {
         } catch (err) {
             return interaction.reply({
                 content: '❌ Database error.',
-                ephemeral: true
+                flags: 64
             });
         }
 
-        const driver = drivers.find(d => d.userId === targetUser.id);
+        // 🔥 BURASI FIX
+        const driver = drivers[targetUser.id];
 
         if (!driver) {
             return interaction.reply({
                 content: `❌ No stats found for ${targetUser.username}`,
-                ephemeral: true
+                flags: 64
             });
         }
 
