@@ -9,9 +9,15 @@ module.exports = {
         .setDescription('Edit stats')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 
-        .addUserOption(opt => opt.setName('user').setRequired(true))
+        .addUserOption(opt =>
+            opt.setName('user')
+                .setDescription('User to edit')
+                .setRequired(true)
+        )
+
         .addStringOption(opt =>
             opt.setName('stat')
+                .setDescription('Stat to edit')
                 .setRequired(true)
                 .addChoices(
                     { name: 'races', value: 'races' },
@@ -20,7 +26,12 @@ module.exports = {
                     { name: 'doty', value: 'doty' }
                 )
         )
-        .addIntegerOption(opt => opt.setName('amount').setRequired(true)),
+
+        .addIntegerOption(opt =>
+            opt.setName('amount')
+                .setDescription('Amount (+ or -)')
+                .setRequired(true)
+        ),
 
     async execute(interaction) {
 
@@ -34,7 +45,8 @@ module.exports = {
             drivers[user.id] = {
                 races: 0, wins: 0, podiums: 0,
                 poles: 0, dnf: 0, dns: 0,
-                wdc: 0, wcc: 0, doty: 0
+                wdc: 0, wcc: 0, doty: 0,
+                voters: []
             };
         }
 
