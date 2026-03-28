@@ -18,7 +18,7 @@ module.exports = {
 
     async execute(interaction) {
 
-        // 🔥 KRİTİK SATIR (3 saniye fix)
+        // 🔥 3 saniye fix
         await interaction.deferReply();
 
         const targetUser = interaction.options.getUser('user') || interaction.user;
@@ -32,7 +32,7 @@ module.exports = {
             });
         }
 
-        // 🔥 SENİN ANA BUG BURDAYDI (find değil!)
+        // 🔥 SENİN JSON OBJECT olduğu için .find değil BU:
         const driver = drivers[targetUser.id];
 
         if (!driver) {
@@ -41,6 +41,7 @@ module.exports = {
             });
         }
 
+        // SAFE VALUES
         const races = Number(driver.races) || 0;
         const wins = Number(driver.wins) || 0;
         const podiums = Number(driver.podiums) || 0;
@@ -60,21 +61,21 @@ module.exports = {
             .setThumbnail(targetUser.displayAvatarURL({ size: 256 }))
 
             .addFields(
-                { name: '🏁 Races', value: `${races}`, inline: true },
-                { name: '🏆 Wins', value: `${wins}`, inline: true },
-                { name: '🥇 Podiums', value: `${podiums}`, inline: true },
+                { name: '🏁 Races', value: `**${races}**`, inline: true },
+                { name: '🏆 Wins', value: `**${wins}**`, inline: true },
+                { name: '🥇 Podiums', value: `**${podiums}**`, inline: true },
 
-                { name: '🎯 Poles', value: `${poles}`, inline: true },
-                { name: '🌟 DOTY', value: `${doty}`, inline: true },
-                { name: '📊 Win Rate', value: `%${winRate}`, inline: true },
+                { name: '🎯 Poles', value: `**${poles}**`, inline: true },
+                { name: '🌟 DOTY', value: `**${doty}**`, inline: true },
+                { name: '📊 Win Rate', value: `**%${winRate}**`, inline: true },
 
-                { name: '💀 DNF', value: `${dnf}`, inline: true },
-                { name: '⚡ DNS', value: `${dns}`, inline: true },
-                { name: '⚠️ DNF Rate', value: `%${dnfRate}`, inline: true },
+                { name: '💀 DNF', value: `**${dnf}**`, inline: true },
+                { name: '⚡ DNS', value: `**${dns}**`, inline: true },
+                { name: '⚠️ DNF Rate', value: `**%${dnfRate}**`, inline: true },
 
                 {
                     name: '👑 Championships',
-                    value: `WDC: ${wdc} | WCC: ${wcc}`
+                    value: `WDC: **${wdc}** | WCC: **${wcc}**`
                 }
             )
 
@@ -84,7 +85,6 @@ module.exports = {
             })
             .setTimestamp();
 
-        // 🔥 ARTIK reply YOK
         await interaction.editReply({ embeds: [embed] });
     }
 };
