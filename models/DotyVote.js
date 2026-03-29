@@ -1,12 +1,11 @@
-//--------------------------
-// DOTY VOTE MODEL
-//--------------------------
-
 const mongoose = require('mongoose');
 
 const dotyVoteSchema = new mongoose.Schema({
+
     messageId: String,
     channelId: String,
+    guildId: String,
+
     participants: [String],
 
     votes: {
@@ -26,6 +25,6 @@ const dotyVoteSchema = new mongoose.Schema({
         default: false
     }
 
-}, { timestamps: true });
+});
 
 module.exports = mongoose.model('DotyVote', dotyVoteSchema);
