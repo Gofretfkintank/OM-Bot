@@ -1,22 +1,32 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const fs = require('fs');
+const Warn = require('../models/Warn');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('warnings')
-        .setDescription('Check the warning history of a member.')
-        .addUserOption(option => 
-            option.setName('user')
-                .setDescription('The user to check warnings for')
-                .setRequired(true))
+        .setDescription('Check warnings')
+        .addUserOption(opt =>
+            opt.setName('user').setDescription('User').setRequired(true))
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+
     async execute(interaction) {
         await interaction.deferReply();
+
         const user = interaction.options.getUser('user');
-        
-        let warns = JSON.parse(fs.readFileSync('./warns.json', 'utf8') || '{}');
-        const history = warns[user.id]?.map((w, i) => `\`${i + 1}.\` **Reason:** ${w.reason} (By: ${w.moderator})`).join('\n') || 'This user has no warnings. ✅';
-        
-        await interaction.editReply(`📋 **Warning History for ${user.tag}:**\n${history}`);
-    },
+
+        const data = await Warn.findOne({
+            userId: user.id,
+            guildId: interaction.guildId
+        });
+
+        if (!data || data.warns.length === 0) {
+            return interaction.editReply('No warnings.');
+        }
+
+        const history = data.warns
+            .map((w, i) => `${i + 1}. ${w.reason} (By: ${w.moderator})`)
+            .join('\n');
+
+        await interaction.editReply(`📋 ${user.tag} warnings:\n${history}`);
+    }
 };
