@@ -6,10 +6,7 @@ const {
     ComponentType
 } = require('discord.js');
 
-const fs = require('fs');
-const path = require('path');
-
-const driversPath = path.join(__dirname, '../drivers.json');
+const Driver = require('../models/Driver'); // 🔥 MODEL
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -17,26 +14,12 @@ module.exports = {
         .setDescription('Start DOTY vote')
 
         .addUserOption(opt => 
-            opt.setName('p1')
-                .setDescription('Driver 1')
-                .setRequired(true)
+            opt.setName('p1').setDescription('Driver 1').setRequired(true)
         )
-        .addUserOption(opt => 
-            opt.setName('p2')
-                .setDescription('Driver 2')
-        )
-        .addUserOption(opt => 
-            opt.setName('p3')
-                .setDescription('Driver 3')
-        )
-        .addUserOption(opt => 
-            opt.setName('p4')
-                .setDescription('Driver 4')
-        )
-        .addUserOption(opt => 
-            opt.setName('p5')
-                .setDescription('Driver 5')
-        ),
+        .addUserOption(opt => opt.setName('p2').setDescription('Driver 2'))
+        .addUserOption(opt => opt.setName('p3').setDescription('Driver 3'))
+        .addUserOption(opt => opt.setName('p4').setDescription('Driver 4'))
+        .addUserOption(opt => opt.setName('p5').setDescription('Driver 5')),
 
     async execute(interaction) {
 
@@ -100,21 +83,17 @@ module.exports = {
 
             if (!winner) return;
 
-            const drivers = JSON.parse(fs.readFileSync(driversPath, 'utf8'));
+            // 🔥 DRIVER BUL / OLUŞTUR
+            let driver = await Driver.findOne({ userId: winner });
 
-            if (!drivers[winner]) {
-                drivers[winner] = {
-                    races: 0, wins: 0, podiums: 0,
-                    poles: 0, dnf: 0, dns: 0,
-                    wdc: 0, wcc: 0, doty: 0
-                };
+            if (!driver) {
+                driver = await Driver.create({ userId: winner });
             }
 
-            drivers[winner].doty++;
+            // 🔥 DOTY ARTIR
+            driver.doty++;
+            await driver.save();
 
-            fs.writeFileSync(driversPath, JSON.stringify(drivers, null, 2));
-
-            // 🔥 sonucu mesaj olarak da at (ekstra iyileştirme)
             await interaction.followUp({
                 content: `🏆 Winner: <@${winner}> with ${max} votes!`
             });
