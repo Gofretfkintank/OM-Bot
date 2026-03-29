@@ -8,16 +8,34 @@ const {
     PermissionsBitField
 } = require('discord.js');
 
-const fs = require('node:fs');
-const path = require('node:path');
 require('dotenv').config();
-
-// 🔥 MONGO EKLENDİ
 const mongoose = require('mongoose');
 
+// ----------------------
+// MONGO CONNECT
+// ----------------------
 mongoose.connect(process.env.MONGO_URI)
 .then(() => console.log("🟢 MongoDB bağlandı"))
 .catch(err => console.error("Mongo hata:", err));
+
+// ----------------------
+// DRIVER MODEL
+// ----------------------
+const driverSchema = new mongoose.Schema({
+    userId: String,
+    races: { type: Number, default: 0 },
+    wins: { type: Number, default: 0 },
+    podiums: { type: Number, default: 0 },
+    poles: { type: Number, default: 0 },
+    dnf: { type: Number, default: 0 },
+    dns: { type: Number, default: 0 },
+    wdc: { type: Number, default: 0 },
+    wcc: { type: Number, default: 0 },
+    doty: { type: Number, default: 0 },
+    voters: { type: [String], default: [] }
+});
+
+const Driver = mongoose.model("Driver", driverSchema);
 
 // ----------------------
 
@@ -31,13 +49,9 @@ const client = new Client({
 });
 
 // ----------------------
-// VIP SYSTEM
-// ----------------------
 const COMMANDER_ID = "1097807544849809408";
 const CO_OWNER_ROLE_ID = "1447144645489328199";
 
-// ----------------------
-// GUILD WHITELIST
 // ----------------------
 const allowedGuilds = [
     process.env.GUILD_ID_1,
@@ -45,30 +59,12 @@ const allowedGuilds = [
 ].filter(Boolean);
 
 // ----------------------
-// DB PATH (ESKİ JSON - DOKUNMADIK)
-// ----------------------
-const driversFile = path.join(__dirname, 'drivers.json');
-
-// ----------------------
-// LOAD / SAVE (ESKİ - DOKUNMADIK)
-// ----------------------
-function loadDrivers() {
-    try {
-        if (!fs.existsSync(driversFile)) return {};
-        return JSON.parse(fs.readFileSync(driversFile, 'utf8'));
-    } catch {
-        return {};
-    }
-}
-
-function saveDrivers(data) {
-    fs.writeFileSync(driversFile, JSON.stringify(data, null, 2));
-}
-
-// ----------------------
 // COMMAND LOAD
 // ----------------------
 client.commands = new Collection();
+const fs = require('fs');
+const path = require('path');
+
 const commandsPath = path.join(__dirname, 'commands');
 
 for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) {
@@ -90,7 +86,7 @@ if (fs.existsSync(eventsPath)) {
 }
 
 // ----------------------
-// READY EVENT
+// READY
 // ----------------------
 client.once('ready', async () => {
     console.log(`[ONLINE] ${client.user.tag}`);
@@ -111,7 +107,7 @@ client.once('ready', async () => {
 });
 
 // ----------------------
-// INTERACTION HANDLER
+// INTERACTION
 // ----------------------
 client.on('interactionCreate', async interaction => {
 
@@ -125,40 +121,7 @@ client.on('interactionCreate', async interaction => {
         if (!command) return;
 
         try {
-            const member = await interaction.guild.members.fetch(interaction.user.id);
-
-            const isCommander = interaction.user.id === COMMANDER_ID;
-            const isCoOwner = member.roles.cache.has(CO_OWNER_ROLE_ID);
-            const hasFullPower = isCommander || isCoOwner;
-
-            const modCommands = new Set(['mute', 'timeout', 'ban', 'kick']);
-
-            if (modCommands.has(interaction.commandName)) {
-
-                const target = interaction.options.getMember('target') || interaction.options.getMember('user');
-
-                if (target) {
-
-                    if (target.roles.highest.position >= interaction.guild.members.me.roles.highest.position) {
-                        return interaction.reply({
-                            content: '❌ I cannot act on this user (role hierarchy).',
-                            ephemeral: true
-                        });
-                    }
-
-                    const targetIsStaff = target.permissions.has(PermissionsBitField.Flags.ManageMessages);
-
-                    if (targetIsStaff && !hasFullPower) {
-                        return interaction.reply({
-                            content: '❌ Only VIPs can act on staff!',
-                            ephemeral: true
-                        });
-                    }
-                }
-            }
-
             await command.execute(interaction);
-
         } catch (err) {
             console.error(`[ERROR] ${interaction.commandName}`, err);
 
@@ -175,43 +138,38 @@ client.on('interactionCreate', async interaction => {
     // ----------------------
     else if (interaction.isButton() && interaction.customId === 'vote_doty') {
 
-        try {
-            const userIds = [...interaction.message.mentions.users.keys()];
-            if (userIds.length === 0) {
-                return interaction.reply({ content: 'No drivers found!', ephemeral: true });
-            }
-
-            const row = new ActionRowBuilder();
-
-            for (const id of userIds.slice(0, 5)) {
-                let member;
-                try {
-                    member = await interaction.guild.members.fetch(id);
-                } catch {
-                    member = null;
-                }
-
-                row.addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`confirm_doty_${id}_${interaction.message.id}`)
-                        .setLabel(member?.user.username || 'Driver')
-                        .setStyle(ButtonStyle.Success)
-                );
-            }
-
-            await interaction.reply({
-                content: 'Select Driver of the Day:',
-                components: [row],
-                ephemeral: true
-            });
-
-        } catch (err) {
-            console.error("Vote list error:", err);
+        const userIds = [...interaction.message.mentions.users.keys()];
+        if (userIds.length === 0) {
+            return interaction.reply({ content: 'No drivers found!', ephemeral: true });
         }
+
+        const row = new ActionRowBuilder();
+
+        for (const id of userIds.slice(0, 5)) {
+            let member;
+            try {
+                member = await interaction.guild.members.fetch(id);
+            } catch {
+                member = null;
+            }
+
+            row.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`confirm_doty_${id}_${interaction.message.id}`)
+                    .setLabel(member?.user.username || 'Driver')
+                    .setStyle(ButtonStyle.Success)
+            );
+        }
+
+        await interaction.reply({
+            content: 'Select Driver of the Day:',
+            components: [row],
+            ephemeral: true
+        });
     }
 
     // ----------------------
-    // DOTY CONFIRM (ŞUAN HALA JSON - SONRA DEĞİŞECEK)
+    // DOTY CONFIRM (🔥 MONGO)
     // ----------------------
     else if (interaction.isButton() && interaction.customId.startsWith('confirm_doty_')) {
 
@@ -220,13 +178,12 @@ client.on('interactionCreate', async interaction => {
             const votedUserId = parts[2];
             const msgId = parts.slice(3).join('_');
 
-            const drivers = loadDrivers();
-
             const voteKey = `${msgId}_${interaction.user.id}`;
 
-            const alreadyVoted = Object.values(drivers).some(d =>
-                d.voters && d.voters.includes(voteKey)
-            );
+            // 🔥 TÜM DRIVERLARDA VOTE KONTROL
+            const alreadyVoted = await Driver.findOne({
+                voters: voteKey
+            });
 
             if (alreadyVoted) {
                 return interaction.reply({
@@ -235,25 +192,16 @@ client.on('interactionCreate', async interaction => {
                 });
             }
 
-            if (!drivers[votedUserId]) {
-                drivers[votedUserId] = {
-                    races: 0,
-                    wins: 0,
-                    podiums: 0,
-                    poles: 0,
-                    dnf: 0,
-                    dns: 0,
-                    wdc: 0,
-                    wcc: 0,
-                    doty: 0,
-                    voters: []
-                };
+            let driver = await Driver.findOne({ userId: votedUserId });
+
+            if (!driver) {
+                driver = new Driver({ userId: votedUserId });
             }
 
-            drivers[votedUserId].doty++;
-            drivers[votedUserId].voters.push(voteKey);
+            driver.doty += 1;
+            driver.voters.push(voteKey);
 
-            saveDrivers(drivers);
+            await driver.save();
 
             await interaction.update({
                 content: `✅ Vote counted for <@${votedUserId}>!`,
@@ -266,7 +214,5 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// ----------------------
-// LOGIN
 // ----------------------
 client.login(process.env.TOKEN);
