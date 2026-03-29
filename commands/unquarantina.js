@@ -1,10 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const fs = require('fs');
-
-const dbPath = './jailed.json';
-
-const loadDB = () => JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-const saveDB = (data) => fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+const Jail = require('../models/Jail');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -18,7 +13,7 @@ module.exports = {
 
     async execute(interaction) {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: 'You do not have permission.', ephemeral: true });
+            return interaction.reply({ content: 'No permission.', ephemeral: true });
         }
 
         await interaction.deferReply({ ephemeral: true });
@@ -28,15 +23,18 @@ module.exports = {
 
         if (!targetMember) return interaction.editReply('User not found.');
 
-        const db = loadDB();
-        const oldRoles = db[targetMember.id];
+        // 🔥 MONGO
+        const data = await Jail.findOne({
+            userId: targetMember.id,
+            guildId: interaction.guildId
+        });
 
-        if (!oldRoles) {
+        if (!data) {
             return interaction.editReply('This user is not jailed.');
         }
 
         try {
-            await targetMember.roles.set(oldRoles);
+            await targetMember.roles.set(data.roles);
 
             for (const channel of interaction.guild.channels.cache.values()) {
                 try {
@@ -44,14 +42,16 @@ module.exports = {
                 } catch {}
             }
 
-            delete db[targetMember.id];
-            saveDB(db);
+            await Jail.deleteOne({
+                userId: targetMember.id,
+                guildId: interaction.guildId
+            });
 
             return interaction.editReply(`🔓 ${targetMember.user.tag} has been released.`);
 
         } catch (err) {
             console.error(err);
-            return interaction.editReply('An error occurred while releasing the user.');
+            return interaction.editReply('Error.');
         }
     }
 };
