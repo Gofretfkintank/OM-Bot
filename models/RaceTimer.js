@@ -1,12 +1,11 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
 const raceTimerSchema = new mongoose.Schema({
     messageId: String,
     channelId: String,
     guildId: String,
-    userId: String,
-    duration: Number,
-    startTime: Date
+    endTime: Number,
+    notified: { type: Boolean, default: false }
 });
 
-module.exports = mongoose.model("RaceTimer", raceTimerSchema);
+module.exports = mongoose.model('RaceTimer', raceTimerSchema);
