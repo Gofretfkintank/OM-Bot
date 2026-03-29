@@ -1,4 +1,4 @@
-// events/raceTimer.js
+const RaceTimer = require('../models/RaceTimer');
 
 const allowedChannels = [
     '1452925248973443072',    
@@ -14,89 +14,93 @@ const raceKeywords = [
 ];
 
 module.exports = (client) => {
+
+    // 🔥 BOT AÇILINCA TIMERLARI GERİ YÜKLE
+    client.once('ready', async () => {
+        const timers = await RaceTimer.find();
+
+        for (const t of timers) {
+            const elapsed = Date.now() - new Date(t.startTime).getTime();
+            const remaining = t.duration - elapsed;
+
+            if (remaining <= 0) {
+                await RaceTimer.deleteOne({ _id: t._id });
+                continue;
+            }
+
+            setTimeout(async () => {
+                try {
+                    const channel = await client.channels.fetch(t.channelId);
+                    const msg = await channel.messages.fetch(t.messageId);
+
+                    for (let i = 0; i < 5; i++) {
+                        await msg.reply(`🏁 <@${t.userId}> **RACE TIME!** GET TO THE TRACK NOW! 🏎️💨`);
+                        await new Promise(res => setTimeout(res, 1000));
+                    }
+
+                    await RaceTimer.deleteOne({ _id: t._id });
+
+                } catch (err) {
+                    console.error(err);
+                }
+            }, remaining);
+        }
+    });
+
     client.on('messageCreate', async (message) => {
 
-        console.log('\n====== YENİ MESAJ ======');
-        console.log('Author:', message.author.tag);
-        console.log('Channel:', message.channel.id);
-        console.log('Content:', message.content);
-
-        if (message.author.bot) {
-            console.log('❌ Bot mesajı, skip');
-            return;
-        }
-
-        if (!allowedChannels.includes(message.channel.id)) {
-            console.log('❌ Kanal izinli değil');
-            return;
-        }
-
-        console.log('✅ Kanal uygun');
+        if (message.author.bot) return;
+        if (!allowedChannels.includes(message.channel.id)) return;
 
         const content = message.content.toLowerCase();
 
         const foundKeywords = raceKeywords.filter(word => content.includes(word));
-
-        console.log('🔍 Bulunan keywordler:', foundKeywords);
-        console.log(`🔢 Keyword sayısı: ${foundKeywords.length}`);
-
-        if (foundKeywords.length < 5) {
-            console.log('❌ Yeterli keyword yok, işlem iptal');
-            return;
-        }
-
-        console.log('✅ Keyword kontrol geçti');
+        if (foundKeywords.length < 5) return;
 
         let totalMs = 0;
 
         const hourRegex = /(\d+)\s*(hours?|h|saat|sa)\b/g;
         const minRegex = /(\d+)\s*(minutes?|min|m|dakika|dk)\b/g;
 
-        let hourMatch;
-        while ((hourMatch = hourRegex.exec(content)) !== null) {
-            const val = parseInt(hourMatch[1]);
-            console.log(`⏱ Saat bulundu: ${val}`);
-            totalMs += val * 3600 * 1000;
+        let match;
+        while ((match = hourRegex.exec(content)) !== null) {
+            totalMs += parseInt(match[1]) * 3600 * 1000;
         }
 
-        let minMatch;
-        while ((minMatch = minRegex.exec(content)) !== null) {
-            const val = parseInt(minMatch[1]);
-            console.log(`⏱ Dakika bulundu: ${val}`);
-            totalMs += val * 60 * 1000;
+        while ((match = minRegex.exec(content)) !== null) {
+            totalMs += parseInt(match[1]) * 60 * 1000;
         }
 
-        console.log(`⏱ Toplam süre(ms): ${totalMs}`);
+        if (totalMs <= 0) return;
 
-        if (totalMs <= 0) {
-            console.log('❌ Süre bulunamadı, iptal');
-            return;
-        }
-
-        console.log(`✅ Timer kuruluyor: ${totalMs / 1000} saniye`);
-
-        // ✅ SADECE CUSTOM EMOJI
+        // emoji
         try {
             await message.react('1478771734831173662');
-            console.log('✅ Custom emoji atıldı');
-        } catch (err) {
-            console.error('❌ REACT ERROR:', err);
-        }
+        } catch {}
+
+        // 🔥 DB'YE KAYDET
+        const timerData = await RaceTimer.create({
+            messageId: message.id,
+            channelId: message.channel.id,
+            guildId: message.guild.id,
+            userId: message.author.id,
+            duration: totalMs,
+            startTime: new Date()
+        });
 
         // TIMER
         setTimeout(async () => {
-            console.log('🏁 TIMER BİTTİ, mesaj gönderiliyor');
-
             try {
                 for (let i = 0; i < 5; i++) {
                     await message.reply(`🏁 ${message.author} **RACE TIME!** GET TO THE TRACK NOW! 🏎️💨`);
-                    console.log(`📢 Ping ${i + 1}`);
                     await new Promise(res => setTimeout(res, 1000));
                 }
-            } catch (err) {
-                console.error('❌ TIMER ERROR:', err);
-            }
 
+                await RaceTimer.deleteOne({ _id: timerData._id });
+
+            } catch (err) {
+                console.error(err);
+            }
         }, totalMs);
 
     });
