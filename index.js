@@ -12,6 +12,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 require('dotenv').config();
 
+// 🔥 MONGO EKLENDİ
+const mongoose = require('mongoose');
+
+mongoose.connect(process.env.MONGO_URI)
+.then(() => console.log("🟢 MongoDB bağlandı"))
+.catch(err => console.error("Mongo hata:", err));
+
+// ----------------------
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -36,12 +45,12 @@ const allowedGuilds = [
 ].filter(Boolean);
 
 // ----------------------
-// DB PATH
+// DB PATH (ESKİ JSON - DOKUNMADIK)
 // ----------------------
 const driversFile = path.join(__dirname, 'drivers.json');
 
 // ----------------------
-// LOAD / SAVE (OBJECT DB)
+// LOAD / SAVE (ESKİ - DOKUNMADIK)
 // ----------------------
 function loadDrivers() {
     try {
@@ -106,9 +115,6 @@ client.once('ready', async () => {
 // ----------------------
 client.on('interactionCreate', async interaction => {
 
-    // ----------------------
-    // SLASH COMMANDS
-    // ----------------------
     if (interaction.isChatInputCommand()) {
 
         if (!allowedGuilds.includes(interaction.guildId)) {
@@ -165,7 +171,7 @@ client.on('interactionCreate', async interaction => {
     }
 
     // ----------------------
-    // DOTY BUTTON (SEÇİM MENÜSÜ)
+    // DOTY BUTTON
     // ----------------------
     else if (interaction.isButton() && interaction.customId === 'vote_doty') {
 
@@ -205,7 +211,7 @@ client.on('interactionCreate', async interaction => {
     }
 
     // ----------------------
-    // DOTY CONFIRM
+    // DOTY CONFIRM (ŞUAN HALA JSON - SONRA DEĞİŞECEK)
     // ----------------------
     else if (interaction.isButton() && interaction.customId.startsWith('confirm_doty_')) {
 
