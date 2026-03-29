@@ -108,7 +108,7 @@ client.once('clientReady', async () => {
     }
 
     //--------------------------
-    // DOTY AUTO END SYSTEM
+    // DOTY AUTO END LOOP
     //--------------------------
 
     setInterval(async () => {
@@ -148,7 +148,7 @@ client.once('clientReady', async () => {
                     }
 
                     //--------------------------
-                    // RESULT CASES
+                    // RESULT
                     //--------------------------
 
                     if (winners.length === 0) {
@@ -298,20 +298,42 @@ client.on('interactionCreate', async interaction => {
                 return interaction.reply({ content: 'Voting ended.', ephemeral: true });
             }
 
-            if (vote.voters.includes(interaction.user.id)) {
-                return interaction.reply({ content: 'Already voted.', ephemeral: true });
+            //--------------------------
+            // PARTICIPANT CHECK (🔥 FIX)
+            //--------------------------
+
+            if (!vote.participants.includes(votedUserId)) {
+                return interaction.reply({
+                    content: 'Invalid vote.',
+                    ephemeral: true
+                });
             }
 
             //--------------------------
-            // SAVE VOTE
+            // SPAM CHECK
             //--------------------------
 
-            vote.voters.push(interaction.user.id);
+            if (vote.voters.includes(interaction.user.id)) {
+                return interaction.reply({
+                    content: 'Already voted.',
+                    ephemeral: true
+                });
+            }
+
+            //--------------------------
+            // SAFE MAP UPDATE (🔥 FIX)
+            //--------------------------
+
+            if (!vote.votes.has(votedUserId)) {
+                vote.votes.set(votedUserId, 0);
+            }
 
             vote.votes.set(
                 votedUserId,
-                (vote.votes.get(votedUserId) || 0) + 1
+                vote.votes.get(votedUserId) + 1
             );
+
+            vote.voters.push(interaction.user.id);
 
             await vote.save();
 
