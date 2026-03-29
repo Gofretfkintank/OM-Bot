@@ -7,6 +7,7 @@ const {
 } = require('discord.js');
 
 const Driver = require('../models/Driver');
+const DotyVote = require('../models/DotyVote');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -34,24 +35,42 @@ module.exports = {
 
         const row = new ActionRowBuilder();
 
-        participants.forEach(p => {
+        // 🔥 DISPLAY NAME FIX
+        for (const p of participants) {
+
+            let member;
+            try {
+                member = await interaction.guild.members.fetch(p.id);
+            } catch {
+                member = null;
+            }
+
             row.addComponents(
                 new ButtonBuilder()
                     .setCustomId(p.id)
-                    .setLabel(p.username)
+                    .setLabel(member?.displayName || p.username)
                     .setStyle(ButtonStyle.Primary)
             );
-        });
+        }
 
         const msg = await interaction.reply({
-            content: '🗳️ DOTY Vote started!',
+            content: '🗳️ DOTY Vote started! (1 hour)',
             components: [row],
             fetchReply: true
         });
 
+        // 🔥 Mongo kayıt (backup gibi)
+        await DotyVote.create({
+            messageId: msg.id,
+            participants: participants.map(p => p.id),
+            votes: {},
+            voters: [],
+            endTime: Date.now() + 3600000
+        });
+
         const collector = msg.createMessageComponentCollector({
             componentType: ComponentType.Button,
-            time: 3600000 // 1 saat
+            time: 3600000
         });
 
         collector.on('collect', async i => {
@@ -68,6 +87,15 @@ module.exports = {
                     (voteMap.get(i.customId) || 0) + 1
                 );
 
+                // 🔥 Mongo da kaydet
+                await DotyVote.updateOne(
+                    { messageId: msg.id },
+                    {
+                        $push: { voters: i.user.id },
+                        $inc: { [`votes.${i.customId}`]: 1 }
+                    }
+                );
+
                 await i.reply({ content: 'Vote counted', ephemeral: true });
 
             } catch (err) {
@@ -78,11 +106,8 @@ module.exports = {
         collector.on('end', async () => {
 
             try {
-                // Butonları kapat
                 await msg.edit({ components: [] });
-            } catch (err) {
-                console.log('Mesaj silinmiş olabilir, sorun yok');
-            }
+            } catch {}
 
             let max = 0;
 
@@ -98,34 +123,37 @@ module.exports = {
                 }
             }
 
-            // Oy yoksa
             if (winners.length === 0) {
                 return interaction.followUp('❌ No votes.');
             }
 
-            // BERABERLİK
             if (winners.length > 1) {
                 return interaction.followUp(
-                    `🤝 Tie between:\n${winners.map(id => `<@${id}>`).join('\n')} (${max} votes)`
+                    `🤝 Tie:\n${winners.map(id => `<@${id}>`).join('\n')} (${max} votes)`
                 );
             }
 
             const winner = winners[0];
 
-            let driver = await Driver.findOne({ userId: winner });
-
-            if (!driver) {
-                driver = await Driver.create({ userId: winner });
+            try {
+                await Driver.findOneAndUpdate(
+                    { userId: winner },
+                    { $inc: { doty: 1 } },
+                    { upsert: true }
+                );
+            } catch (err) {
+                console.error('DB ERROR:', err);
             }
-
-            driver.doty = (driver.doty || 0) + 1;
-
-            await driver.save();
 
             await interaction.followUp(
                 `🏆 Winner: <@${winner}> with ${max} votes!`
             );
 
+            // 🔥 vote finished
+            await DotyVote.updateOne(
+                { messageId: msg.id },
+                { finished: true }
+            );
         });
     }
 };
