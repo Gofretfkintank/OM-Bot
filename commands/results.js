@@ -1,69 +1,21 @@
 const { 
     SlashCommandBuilder, 
-    PermissionFlagsBits 
+    PermissionFlagsBits,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle
 } = require('discord.js');
 
-const fs = require('node:fs');
-const path = require('node:path');
-
-const driversFile = path.join(__dirname, '../drivers.json');
+const Driver = require('../models/Driver');
 
 // --------------------
-// LOAD / SAVE
+// GET / CREATE DRIVER
 // --------------------
-function loadDrivers() {
-    try {
-        let data = JSON.parse(fs.readFileSync(driversFile, 'utf8'));
-
-        data = data.map(d => ({
-            userId: String(d.userId).trim(),
-            races: Number(d.races) || 0,
-            wins: Number(d.wins) || 0,
-            podiums: Number(d.podiums) || 0,
-            poles: Number(d.poles) || 0,
-            dnf: Number(d.dnf) || 0,
-            dns: Number(d.dns) || 0,
-            wdc: Number(d.wdc) || 0,
-            wcc: Number(d.wcc) || 0,
-            doty: Number(d.doty) || 0,
-            voters: d.voters || []
-        }));
-
-        return data;
-
-    } catch {
-        return [];
-    }
-}
-
-function saveDrivers(data) {
-    fs.writeFileSync(driversFile, JSON.stringify(data, null, 2));
-}
-
-// --------------------
-// AUTO CREATE DRIVER
-// --------------------
-function getDriver(drivers, userId) {
-    userId = String(userId).trim();
-
-    let driver = drivers.find(d => d.userId === userId);
+async function getDriver(userId) {
+    let driver = await Driver.findOne({ userId });
 
     if (!driver) {
-        driver = {
-            userId,
-            races: 0,
-            wins: 0,
-            podiums: 0,
-            poles: 0,
-            dnf: 0,
-            dns: 0,
-            wdc: 0,
-            wcc: 0,
-            doty: 0,
-            voters: []
-        };
-
-        drivers.push(driver);
+        driver = await Driver.create({ userId });
     }
 
     return driver;
@@ -124,11 +76,6 @@ module.exports = {
     async execute(interaction) {
         if (!interaction.channel) return;
 
-        let drivers = loadDrivers();
-
-        // 🔥 voters reset (her GP sonrası temiz)
-        drivers.forEach(d => d.voters = []);
-
         const track = interaction.options.getString('track');
         const raceType = interaction.options.getString('race_type');
         const comments = interaction.options.getString('comments');
@@ -148,10 +95,17 @@ module.exports = {
         const participantIds = participants.map(p => String(p.id));
 
         // --------------------
+        // RESET VOTERS (🔥 DB)
+        // --------------------
+        if (isGP) {
+            await Driver.updateMany({}, { $set: { voters: [] } });
+        }
+
+        // --------------------
         // STATS UPDATE
         // --------------------
-        participants.forEach((user, index) => {
-            const driver = getDriver(drivers, user.id);
+        for (const [index, user] of participants.entries()) {
+            const driver = await getDriver(user.id);
 
             if (isGP) driver.races++;
 
@@ -163,7 +117,9 @@ module.exports = {
             if (isGP && index <= 2) {
                 driver.podiums++;
             }
-        });
+
+            await driver.save();
+        }
 
         // --------------------
         // DNF / DNS
@@ -171,29 +127,29 @@ module.exports = {
         const dnfList = parseIds(interaction.options.getString('dnf'));
         const dnsList = parseIds(interaction.options.getString('dns'));
 
-        dnfList.forEach(id => {
-            const driver = getDriver(drivers, id);
+        for (const id of dnfList) {
+            const driver = await getDriver(id);
 
             driver.dnf++;
 
             if (!participantIds.includes(id) && isGP) {
                 driver.races++;
             }
-        });
 
-        dnsList.forEach(id => {
-            const driver = getDriver(drivers, id);
+            await driver.save();
+        }
+
+        for (const id of dnsList) {
+            const driver = await getDriver(id);
             driver.dns++;
-        });
-
-        saveDrivers(drivers);
+            await driver.save();
+        }
 
         // --------------------
-        // FORMAT (FIX 🔥)
+        // FORMAT
         // --------------------
         const format = async (id) => {
             try {
-                const user = await interaction.client.users.fetch(id);
                 return `<@${id}>`;
             } catch {
                 return `Unknown(${id})`;
@@ -230,11 +186,9 @@ module.exports = {
         await interaction.reply({ content: msg });
 
         // --------------------
-        // DOTY VOTING (ONLY GP 🔥)
+        // DOTY VOTING
         // --------------------
         if (isGP) {
-            const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-
             const row = new ActionRowBuilder();
 
             participants.forEach(user => {
