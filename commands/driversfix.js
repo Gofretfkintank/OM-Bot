@@ -1,8 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
-
-const driversPath = path.join(__dirname, '../drivers.json');
+const Driver = require('../models/Driver'); // 🔥 MODEL
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -42,21 +39,18 @@ module.exports = {
         const stat = interaction.options.getString('stat');
         const amount = interaction.options.getInteger('amount');
 
-        const drivers = JSON.parse(fs.readFileSync(driversPath, 'utf8'));
+        // 🔥 driver bul / yoksa oluştur
+        let driver = await Driver.findOne({ userId: user.id });
 
-        if (!drivers[user.id]) {
-            drivers[user.id] = {
-                races: 0, wins: 0, podiums: 0,
-                poles: 0, dnf: 0, dns: 0,
-                wdc: 0, wcc: 0, doty: 0
-            };
+        if (!driver) {
+            driver = await Driver.create({ userId: user.id });
         }
 
-        drivers[user.id][stat] =
-            Math.max(0, (drivers[user.id][stat] || 0) + amount);
+        // 🔥 stat güncelle (0 altına düşmesin)
+        driver[stat] = Math.max(0, (driver[stat] || 0) + amount);
 
-        fs.writeFileSync(driversPath, JSON.stringify(drivers, null, 2));
+        await driver.save();
 
-        await interaction.reply(`✅ Updated ${stat}`);
+        await interaction.reply(`✅ Updated ${stat} for ${user.username}`);
     }
 };
