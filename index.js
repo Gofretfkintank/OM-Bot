@@ -79,7 +79,7 @@ if (fs.existsSync(eventsPath)) {
 // ----------------------
 // READY
 // ----------------------
-client.once('ready', async () => {
+client.once('clientReady', async () => {
     console.log(`[ONLINE] ${client.user.tag}`);
 
     try {
@@ -161,47 +161,7 @@ client.on('interactionCreate', async interaction => {
     }
 
     // ----------------------
-    // DOTY BUTTON
-    // ----------------------
-    else if (interaction.isButton() && interaction.customId === 'vote_doty') {
-
-        try {
-            const userIds = [...interaction.message.mentions.users.keys()];
-            if (userIds.length === 0) {
-                return interaction.reply({ content: 'No drivers found!', ephemeral: true });
-            }
-
-            const row = new ActionRowBuilder();
-
-            for (const id of userIds.slice(0, 5)) {
-                let member;
-                try {
-                    member = await interaction.guild.members.fetch(id);
-                } catch {
-                    member = null;
-                }
-
-                row.addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`confirm_doty_${id}_${interaction.message.id}`)
-                        .setLabel(member?.user.username || 'Driver')
-                        .setStyle(ButtonStyle.Success)
-                );
-            }
-
-            await interaction.reply({
-                content: 'Select Driver of the Day:',
-                components: [row],
-                ephemeral: true
-            });
-
-        } catch (err) {
-            console.error("Vote list error:", err);
-        }
-    }
-
-    // ----------------------
-    // DOTY CONFIRM (MONGO)
+    // DOTY CONFIRM (MONGO 🔥)
     // ----------------------
     else if (interaction.isButton() && interaction.customId.startsWith('confirm_doty_')) {
 
@@ -215,19 +175,7 @@ client.on('interactionCreate', async interaction => {
             let driver = await Driver.findOne({ userId: votedUserId });
 
             if (!driver) {
-                driver = new Driver({
-                    userId: votedUserId,
-                    races: 0,
-                    wins: 0,
-                    podiums: 0,
-                    poles: 0,
-                    dnf: 0,
-                    dns: 0,
-                    wdc: 0,
-                    wcc: 0,
-                    doty: 0,
-                    voters: []
-                });
+                driver = new Driver({ userId: votedUserId });
             }
 
             if (driver.voters.includes(voteKey)) {
