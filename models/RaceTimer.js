@@ -1,6 +1,6 @@
---------------------------
+//--------------------------------
 // MODEL
---------------------------
+//--------------------------------
 const mongoose = require('mongoose');
 
 const raceTimerSchema = new mongoose.Schema({
