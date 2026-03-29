@@ -1,11 +1,11 @@
---------------------------
+//--------------------------------
 // IMPORTS
---------------------------
+//--------------------------------
 const RaceTimer = require('../models/RaceTimer');
 
---------------------------
+//--------------------------------
 // CONFIG
---------------------------
+//--------------------------------
 const allowedChannels = [
     '1452925248973443072',
     '1452925110037118986',
@@ -19,14 +19,14 @@ const raceKeywords = [
     'sprint','laps','slipstream','white line','race mode'
 ];
 
---------------------------
+//--------------------------------
 // EXPORT
---------------------------
+//--------------------------------
 module.exports = (client) => {
 
-    --------------------------
-    // READY (RECOVERY)
-    --------------------------
+    //--------------------------------
+    // READY (TIMER RESTORE)
+    //--------------------------------
     client.once('ready', async () => {
 
         const timers = await RaceTimer.find({ notified: false });
@@ -65,19 +65,27 @@ module.exports = (client) => {
         console.log(`✅ ${timers.length} timer restore edildi`);
     });
 
-    --------------------------
+    //--------------------------------
     // MESSAGE CREATE
-    --------------------------
+    //--------------------------------
     client.on('messageCreate', async (message) => {
 
         if (message.author.bot) return;
         if (!allowedChannels.includes(message.channel.id)) return;
 
+        //--------------------------------
+        // SON 20 MESAJI ÇEK
+        //--------------------------------
         const messages = await message.channel.messages.fetch({ limit: 20 });
 
+        //--------------------------------
+        // SON RACE MESAJINI BUL
+        //--------------------------------
         const raceMsg = messages
             .filter(m => {
-                const found = raceKeywords.filter(k => m.content.toLowerCase().includes(k));
+                const found = raceKeywords.filter(k => 
+                    m.content.toLowerCase().includes(k)
+                );
                 return found.length >= 5;
             })
             .sort((a,b) => b.createdTimestamp - a.createdTimestamp)
@@ -85,12 +93,15 @@ module.exports = (client) => {
 
         if (!raceMsg) return;
 
+        //--------------------------------
+        // DUPLICATE CHECK
+        //--------------------------------
         const exists = await RaceTimer.findOne({ messageId: raceMsg.id });
         if (exists) return;
 
-        --------------------------
+        //--------------------------------
         // TIME PARSE
-        --------------------------
+        //--------------------------------
         let totalMs = 0;
 
         const hourRegex = /(\d+)\s*(h|hour|saat)/g;
@@ -108,10 +119,16 @@ module.exports = (client) => {
 
         if (totalMs <= 0) return;
 
+        //--------------------------------
+        // END TIME
+        //--------------------------------
         const endTime = raceMsg.createdTimestamp + totalMs;
 
         if (endTime <= Date.now()) return;
 
+        //--------------------------------
+        // DB SAVE
+        //--------------------------------
         await RaceTimer.create({
             messageId: raceMsg.id,
             channelId: raceMsg.channel.id,
@@ -119,8 +136,16 @@ module.exports = (client) => {
             endTime
         });
 
-        try { await raceMsg.react('1478771734831173662'); } catch {}
+        //--------------------------------
+        // REACTION
+        //--------------------------------
+        try {
+            await raceMsg.react('1478771734831173662');
+        } catch {}
 
+        //--------------------------------
+        // TIMER
+        //--------------------------------
         const delay = endTime - Date.now();
 
         setTimeout(async () => {
