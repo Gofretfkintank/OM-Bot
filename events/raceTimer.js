@@ -1,7 +1,5 @@
-const RaceTimer = require('../models/RaceTimer');
-
 const allowedChannels = [
-    '1452925248973443072',    
+    '1452925248973443072',
     '1452925110037118986',
     '1453103992514019499',
     '1480929264693018734',
@@ -9,44 +7,68 @@ const allowedChannels = [
 ];
 
 const raceKeywords = [
-    'off-season', 'host', 'room code', 'track', 'server', 
+    'off-season', 'host', 'room code', 'track', 'server',
     'sprint', 'laps', 'slipstream', 'white line', 'race mode'
 ];
 
+// ----------------------
+// TIME PARSE FUNCTION
+// ----------------------
+function parseTime(content) {
+    let totalMs = 0;
+
+    const hourRegex = /(\d+)\s*(hours?|h|saat|sa)\b/g;
+    const minRegex = /(\d+)\s*(minutes?|min|m|dakika|dk)\b/g;
+
+    let match;
+
+    while ((match = hourRegex.exec(content)) !== null) {
+        totalMs += parseInt(match[1]) * 3600 * 1000;
+    }
+
+    while ((match = minRegex.exec(content)) !== null) {
+        totalMs += parseInt(match[1]) * 60 * 1000;
+    }
+
+    return totalMs;
+}
+
+// ----------------------
+// TIMER START
+// ----------------------
+async function startTimer(message, delay) {
+    try {
+        await message.react('1478771734831173662');
+    } catch {}
+
+    setTimeout(async () => {
+        try {
+            for (let i = 0; i < 5; i++) {
+                await message.reply(`🏁 ${message.author} **RACE TIME!** GET TO THE TRACK NOW! 🏎️💨`);
+                await new Promise(res => setTimeout(res, 1000));
+            }
+        } catch (err) {
+            console.error('TIMER ERROR:', err);
+        }
+    }, delay);
+}
+
+// ----------------------
+// KEYWORD CHECK
+// ----------------------
+function hasEnoughKeywords(content) {
+    const found = raceKeywords.filter(word => content.includes(word));
+    return found.length >= 5;
+}
+
+// ----------------------
+// EXPORT
+// ----------------------
 module.exports = (client) => {
 
-    // 🔥 BOT AÇILINCA TIMERLARI GERİ YÜKLE
-    client.once('ready', async () => {
-        const timers = await RaceTimer.find();
-
-        for (const t of timers) {
-            const elapsed = Date.now() - new Date(t.startTime).getTime();
-            const remaining = t.duration - elapsed;
-
-            if (remaining <= 0) {
-                await RaceTimer.deleteOne({ _id: t._id });
-                continue;
-            }
-
-            setTimeout(async () => {
-                try {
-                    const channel = await client.channels.fetch(t.channelId);
-                    const msg = await channel.messages.fetch(t.messageId);
-
-                    for (let i = 0; i < 5; i++) {
-                        await msg.reply(`🏁 <@${t.userId}> **RACE TIME!** GET TO THE TRACK NOW! 🏎️💨`);
-                        await new Promise(res => setTimeout(res, 1000));
-                    }
-
-                    await RaceTimer.deleteOne({ _id: t._id });
-
-                } catch (err) {
-                    console.error(err);
-                }
-            }, remaining);
-        }
-    });
-
+    // ----------------------
+    // LIVE MESSAGE LISTENER
+    // ----------------------
     client.on('messageCreate', async (message) => {
 
         if (message.author.bot) return;
@@ -54,54 +76,69 @@ module.exports = (client) => {
 
         const content = message.content.toLowerCase();
 
-        const foundKeywords = raceKeywords.filter(word => content.includes(word));
-        if (foundKeywords.length < 5) return;
+        if (!hasEnoughKeywords(content)) return;
 
-        let totalMs = 0;
-
-        const hourRegex = /(\d+)\s*(hours?|h|saat|sa)\b/g;
-        const minRegex = /(\d+)\s*(minutes?|min|m|dakika|dk)\b/g;
-
-        let match;
-        while ((match = hourRegex.exec(content)) !== null) {
-            totalMs += parseInt(match[1]) * 3600 * 1000;
-        }
-
-        while ((match = minRegex.exec(content)) !== null) {
-            totalMs += parseInt(match[1]) * 60 * 1000;
-        }
-
+        const totalMs = parseTime(content);
         if (totalMs <= 0) return;
 
-        // emoji
-        try {
-            await message.react('1478771734831173662');
-        } catch {}
+        startTimer(message, totalMs);
+    });
 
-        // 🔥 DB'YE KAYDET
-        const timerData = await RaceTimer.create({
-            messageId: message.id,
-            channelId: message.channel.id,
-            guildId: message.guild.id,
-            userId: message.author.id,
-            duration: totalMs,
-            startTime: new Date()
-        });
+    // ----------------------
+    // READY (RECOVERY SYSTEM)
+    // ----------------------
+    client.once('ready', async () => {
 
-        // TIMER
-        setTimeout(async () => {
-            try {
-                for (let i = 0; i < 5; i++) {
-                    await message.reply(`🏁 ${message.author} **RACE TIME!** GET TO THE TRACK NOW! 🏎️💨`);
-                    await new Promise(res => setTimeout(res, 1000));
+        console.log('🔁 Recovering active race timers...');
+
+        for (const channelId of allowedChannels) {
+
+            const channel = await client.channels.fetch(channelId).catch(() => null);
+            if (!channel) continue;
+
+            // 🔥 50 mesaj çek
+            const messages = await channel.messages.fetch({ limit: 50 });
+
+            // 🔥 keyword filtre
+            const raceMessages = [];
+
+            for (const msg of messages.values()) {
+
+                if (msg.author.bot) continue;
+
+                const content = msg.content.toLowerCase();
+
+                if (hasEnoughKeywords(content)) {
+                    raceMessages.push(msg);
+                }
+            }
+
+            // 🔥 sadece son 5 geçerli race mesajı
+            const lastRaceMessages = raceMessages
+                .sort((a, b) => b.createdTimestamp - a.createdTimestamp)
+                .slice(0, 5);
+
+            for (const msg of lastRaceMessages) {
+
+                const content = msg.content.toLowerCase();
+                const totalMs = parseTime(content);
+
+                if (totalMs <= 0) continue;
+
+                const endTime = msg.createdTimestamp + totalMs;
+                const now = Date.now();
+
+                if (endTime <= now) {
+                    console.log('⏭ Expired timer skipped');
+                    continue;
                 }
 
-                await RaceTimer.deleteOne({ _id: timerData._id });
+                const remaining = endTime - now;
 
-            } catch (err) {
-                console.error(err);
+                console.log(`✅ Recovered timer: ${remaining / 1000}s`);
+
+                startTimer(msg, remaining);
             }
-        }, totalMs);
-
+        }
     });
 };
