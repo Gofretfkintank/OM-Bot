@@ -11,11 +11,11 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('dotyvote')
         .setDescription('Start DOTY vote')
-        .addUserOption(opt => opt.setName('p1').setRequired(true))
-        .addUserOption(opt => opt.setName('p2'))
-        .addUserOption(opt => opt.setName('p3'))
-        .addUserOption(opt => opt.setName('p4'))
-        .addUserOption(opt => opt.setName('p5')),
+        .addUserOption(opt => opt.setName('p1').setDescription('Participant 1').setRequired(true))
+        .addUserOption(opt => opt.setName('p2').setDescription('Participant 2'))
+        .addUserOption(opt => opt.setName('p3').setDescription('Participant 3'))
+        .addUserOption(opt => opt.setName('p4').setDescription('Participant 4'))
+        .addUserOption(opt => opt.setName('p5').setDescription('Participant 5')),
 
     async execute(interaction) {
 
