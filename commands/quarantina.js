@@ -1,14 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const fs = require('fs');
-
-const dbPath = './jailed.json';
-
-if (!fs.existsSync(dbPath)) {
-    fs.writeFileSync(dbPath, JSON.stringify({}, null, 2));
-}
-
-const loadDB = () => JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-const saveDB = (data) => fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+const Jail = require('../models/Jail');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -22,7 +13,7 @@ module.exports = {
 
     async execute(interaction) {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: 'You do not have permission to use this command.', ephemeral: true });
+            return interaction.reply({ content: 'You do not have permission.', ephemeral: true });
         }
 
         if (!interaction.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
@@ -34,11 +25,11 @@ module.exports = {
         const targetUser = interaction.options.getUser('target');
         const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
-        if (!targetMember) return interaction.editReply('User not found in this server.');
+        if (!targetMember) return interaction.editReply('User not found.');
         if (targetMember.id === interaction.user.id) return interaction.editReply('You cannot jail yourself.');
 
         if (targetMember.roles.highest.position >= interaction.guild.members.me.roles.highest.position) {
-            return interaction.editReply('I cannot act on this user due to role hierarchy.');
+            return interaction.editReply('Role hierarchy issue.');
         }
 
         const specialModID = '837688603739816046';
@@ -54,9 +45,13 @@ module.exports = {
                 });
             }
 
-            const db = loadDB();
+            // 🔥 MONGO
+            const existing = await Jail.findOne({
+                userId: targetMember.id,
+                guildId: interaction.guildId
+            });
 
-            if (db[targetMember.id]) {
+            if (existing) {
                 return interaction.editReply('This user is already jailed.');
             }
 
@@ -64,8 +59,11 @@ module.exports = {
                 .filter(r => r.id !== interaction.guild.id && r.id !== jailRole.id)
                 .map(r => r.id);
 
-            db[targetMember.id] = oldRoles;
-            saveDB(db);
+            await Jail.create({
+                userId: targetMember.id,
+                guildId: interaction.guildId,
+                roles: oldRoles
+            });
 
             await targetMember.roles.set([jailRole]);
 
@@ -73,7 +71,6 @@ module.exports = {
                 try {
                     if (targetMember.id === specialModID) {
                         if (channel.parentId === modCategoryID) {
-                            // Read-only in mod channels
                             await channel.permissionOverwrites.edit(targetMember, {
                                 ViewChannel: true,
                                 SendMessages: false,
@@ -81,7 +78,6 @@ module.exports = {
                                 Connect: false
                             });
                         } else {
-                            // Normal access in public channels
                             await channel.permissionOverwrites.edit(targetMember, {
                                 ViewChannel: true,
                                 SendMessages: true,
@@ -90,7 +86,6 @@ module.exports = {
                             });
                         }
                     } else {
-                        // Full jail
                         await channel.permissionOverwrites.edit(targetMember, {
                             ViewChannel: false,
                             SendMessages: false,
@@ -104,7 +99,7 @@ module.exports = {
 
         } catch (err) {
             console.error(err);
-            return interaction.editReply('An error occurred while processing the command.');
+            return interaction.editReply('Error.');
         }
     }
 };
