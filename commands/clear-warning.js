@@ -6,7 +6,10 @@ module.exports = {
         .setName('clear-warning')
         .setDescription('Clear all warnings')
         .addUserOption(opt =>
-            opt.setName('user').setDescription('User').setRequired(true))
+            opt.setName('user')
+                .setDescription('User')
+                .setRequired(true)
+        )
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     async execute(interaction) {
@@ -14,18 +17,18 @@ module.exports = {
 
         const user = interaction.options.getUser('user');
 
-        const data = await Warn.findOne({
+        // 🔥 TÜM WARNLARI SİL
+        const result = await Warn.deleteMany({
             userId: user.id,
             guildId: interaction.guildId
         });
 
-        if (!data) {
-            return interaction.editReply('No warnings found.');
+        if (result.deletedCount === 0) {
+            return interaction.editReply('❌ No warnings found.');
         }
 
-        data.warns = [];
-        await data.save();
-
-        await interaction.editReply(`✅ Cleared warnings for ${user.tag}`);
+        await interaction.editReply(
+            `🧹 Cleared ${result.deletedCount} warnings for ${user.tag}`
+        );
     }
 };
