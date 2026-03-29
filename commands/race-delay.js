@@ -1,12 +1,12 @@
---------------------------
+//--------------------------------
 // IMPORTS
---------------------------
+//--------------------------------
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const RaceTimer = require('../models/RaceTimer');
 
---------------------------
+//--------------------------------
 // COMMAND
---------------------------
+//--------------------------------
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('race-delay')
@@ -25,9 +25,9 @@ module.exports = {
         const minutes = interaction.options.getInteger('minutes');
         const delayMs = minutes * 60000;
 
-        --------------------------
-        // SON TIMERI BUL
-        --------------------------
+        //--------------------------------
+        // AKTİF TIMER BUL
+        //--------------------------------
         const timer = await RaceTimer.findOne({ notified: false })
             .sort({ endTime: -1 });
 
@@ -35,14 +35,12 @@ module.exports = {
             return interaction.editReply('❌ No active race found.');
         }
 
-        --------------------------
+        //--------------------------------
         // DELAY UYGULA
-        --------------------------
+        //--------------------------------
         timer.endTime += delayMs;
         await timer.save();
 
-        await interaction.editReply(
-            `⏳ Race delayed by ${minutes} minutes.`
-        );
+        await interaction.editReply(`⏳ Race delayed by ${minutes} minutes.`);
     }
 };
