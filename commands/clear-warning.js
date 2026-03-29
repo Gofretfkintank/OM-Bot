@@ -1,26 +1,31 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const fs = require('fs');
+const Warn = require('../models/Warn');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('clear-warning')
-        .setDescription('Completely clear all warnings for a user.')
-        .addUserOption(option => 
-            option.setName('user')
-                .setDescription('The user whose warnings will be deleted')
-                .setRequired(true))
+        .setDescription('Clear all warnings')
+        .addUserOption(opt =>
+            opt.setName('user').setDescription('User').setRequired(true))
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
     async execute(interaction) {
         await interaction.deferReply();
+
         const user = interaction.options.getUser('user');
-        
-        let warns = JSON.parse(fs.readFileSync('./warns.json', 'utf8') || '{}');
-        if (warns[user.id]) {
-            delete warns[user.id];
-            fs.writeFileSync('./warns.json', JSON.stringify(warns, null, 2));
-            await interaction.editReply(`✅ All warnings for **${user.tag}** have been cleared. ♻️`);
-        } else {
-            await interaction.editReply('❌ This user has no warnings to clear.');
+
+        const data = await Warn.findOne({
+            userId: user.id,
+            guildId: interaction.guildId
+        });
+
+        if (!data) {
+            return interaction.editReply('No warnings found.');
         }
-    },
+
+        data.warns = [];
+        await data.save();
+
+        await interaction.editReply(`✅ Cleared warnings for ${user.tag}`);
+    }
 };
