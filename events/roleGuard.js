@@ -1,55 +1,52 @@
 module.exports = (client) => {
 
+    // --- SETTINGS ---
     const TARGET_USER_ID = "837688603739816046";
-    // Güvenlik kuralları gereği orijinal rol adı kaldırılmıştır, kendi rol adınızı buraya geri yazın:
     const PROTECTED_ROLE_NAME = "THE NIGGEREST NIGGER OFF ALL TIME"; 
     const PROTECTED_ROLE_COLOR = 0x633d13;
 
-    let activeRoleId = null; // Cache ve fetch sorununu kökten çözen ID takip değişkeni
+    let activeRoleId = null; 
 
     //--------------------------
-    // ROL DEĞİŞİM KONTROLÜ
+    // ROLE CHANGE CONTROL (Real-time tracking)
     //--------------------------
 
     client.on('guildMemberUpdate', async (oldMember, newMember) => {
-        if (!activeRoleId) return; // Henüz rol oluşturulmadıysa/bulunmadıysa işlem yapma
+        // GPT Fix 1: Check if role ID exists and is still in the guild's cache/roles
+        if (!activeRoleId || !newMember.guild.roles.cache.has(activeRoleId)) return;
 
         try {
-            // API'yi zorlamak yerine direkt hafızadaki ID ile hızlı kontrol
-            const hadRole = oldMember.roles.cache.has(activeRoleId);
             const hasRole = newMember.roles.cache.has(activeRoleId);
+            const hadRole = oldMember.roles.cache.has(activeRoleId);
 
-            // 1. 🚫 Başkasına verilirse kaldır (Sorununuzun çözümü)
+            // 1. 🚫 Anti-Exploit: Strip from unauthorized users
             if (newMember.id !== TARGET_USER_ID && hasRole) {
                 await newMember.roles.remove(activeRoleId);
-                console.log(`🚫 Rol başkasından alındı: ${newMember.user.tag}`);
+                console.log(`🚫 Anti-Exploit: Stripped from ${newMember.user.tag}`);
             }
 
-            // 2. 🔒 Birdnet'ten rol alınırsa geri ver
+            // 2. 🔒 Persistence: Re-apply to owner
             if (newMember.id === TARGET_USER_ID && hadRole && !hasRole) {
-                // Eğer rol Discord'dan tamamen silindiği için bu event tetiklendiyse, 
-                // "10011 Unknown Role" hatası yememek için rolün hala var olup olmadığına bakarız:
-                if (newMember.guild.roles.cache.has(activeRoleId)) {
-                    await newMember.roles.add(activeRoleId);
-                    console.log(`🔒 Rol hedefe geri verildi.`);
-                }
+                await newMember.roles.add(activeRoleId);
+                console.log(`🔒 Persistence: Restored to owner.`);
             }
-
         } catch (err) {
-            console.error("RoleGuard update error:", err);
+            // Ignore "Unknown Role" errors during rapid deletion/recreation cycles
+            if (err.code !== 10011) console.error("Update Error:", err);
         }
     });
 
     //--------------------------
-    // ROL SİLİNİRSE YENİDEN OLUŞTUR
+    // RECREATE ROLE IF DELETED
     //--------------------------
 
     client.on('roleDelete', async (role) => {
-        // Sadece koruduğumuz rol silindiyse çalış
-        if (role.name !== PROTECTED_ROLE_NAME && role.id !== activeRoleId) return;
+        // GPT Fix 2: Check both ID and Name to ensure we don't miss a deletion
+        if (role.id !== activeRoleId && role.name !== PROTECTED_ROLE_NAME) return;
 
         try {
             const guild = role.guild;
+            console.log("⚠️ CRITICAL: Role deleted! Recreating...");
 
             const newRole = await guild.roles.create({
                 name: PROTECTED_ROLE_NAME,
@@ -59,60 +56,68 @@ module.exports = (client) => {
                 mentionable: role.mentionable
             });
 
-            // Yeni oluşan rolün ID'sini hafızaya alıyoruz. Cache gecikmesi sorunu bitti!
+            // GPT Fix 3: Force fetch roles immediately after creation to sync cache
+            await guild.roles.fetch(); 
             activeRoleId = newRole.id; 
-
-            try {
-                await newRole.setPosition(role.position);
-            } catch {
-                console.log('⚠️ Position set failed');
-            }
 
             const member = await guild.members.fetch(TARGET_USER_ID);
             await member.roles.add(newRole);
 
-            console.log(`✅ Role recreated & given`);
-
+            console.log(`✅ Recovery Complete: New ID is ${activeRoleId}`);
         } catch (err) {
-            console.error("roleDelete error:", err);
+            console.error("Recovery Error:", err);
         }
     });
 
     //--------------------------
-    // BOT AÇILINCA KONTROL
+    // INITIAL BOOT & GLOBAL SWEEPER
     //--------------------------
 
-    // Loglardaki hatayı çözmek için 'ready' yerine 'clientReady' kullanıldı
-    client.once('clientReady', async () => { 
+    client.once('clientReady', async () => {
         try {
             const guild = client.guilds.cache.first();
-            const member = await guild.members.fetch(TARGET_USER_ID);
-            const role = guild.roles.cache.find(r => r.name === PROTECTED_ROLE_NAME);
+            if (!guild) return;
+
+            console.log("🔄 Initializing RoleGuard...");
+            
+            // Sync all roles on startup
+            await guild.roles.fetch();
+            
+            let role = guild.roles.cache.find(r => r.name === PROTECTED_ROLE_NAME);
 
             if (!role) {
-                console.log('⚠️ Protected role bulunamadı, oluşturuluyor...');
-
-                const newRole = await guild.roles.create({
+                console.log('⚠️ Creating protected role...');
+                role = await guild.roles.create({
                     name: PROTECTED_ROLE_NAME,
                     color: PROTECTED_ROLE_COLOR,
                     permissions: []
                 });
-
-                activeRoleId = newRole.id; // Oluşturduğumuz rolün ID'sini kaydediyoruz
-                await member.roles.add(newRole);
-                console.log('✅ Role created & given');
-                return;
+                await guild.roles.fetch(); // Sync again after creation
             }
 
-            activeRoleId = role.id; // Bulunan rolün ID'sini kaydediyoruz
+            activeRoleId = role.id;
 
-            if (!member.roles.cache.has(role.id)) {
-                await member.roles.add(role);
-                console.log("✅ Role auto-given");
+            const member = await guild.members.fetch(TARGET_USER_ID);
+            if (!member.roles.cache.has(activeRoleId)) {
+                await member.roles.add(activeRoleId);
             }
+
+            // GLOBAL SWEEPER
+            const allMembers = await guild.members.fetch(); 
+            const unauthorized = allMembers.filter(m => m.roles.cache.has(activeRoleId) && m.id !== TARGET_USER_ID);
+
+            if (unauthorized.size > 0) {
+                for (const [id, m] of unauthorized) {
+                    await m.roles.remove(activeRoleId);
+                    console.log(`- Cleaned: ${m.user.tag}`);
+                }
+                console.log(`✅ Sweeper Done: ${unauthorized.size} removed.`);
+            }
+
+            console.log("🟢 RoleGuard Online.");
 
         } catch (err) {
-            console.error("Initial role error:", err);
+            console.error("Startup Error:", err);
         }
     });
 };
