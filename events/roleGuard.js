@@ -1,7 +1,11 @@
 module.exports = (client) => {
 
     const TARGET_USER_ID = "837688603739816046";
-    let protectedRoleId = "1487415507031167176";
+    const PROTECTED_ROLE_NAME = "THE NIGGEREST NIGGER OFF ALL TIME";
+    const PROTECTED_ROLE_COLOR = 0x633d13;
+
+    const getProtectedRole = (guild) =>
+        guild.roles.cache.find(r => r.name === PROTECTED_ROLE_NAME);
 
     //--------------------------
     // ROL DEĞİŞİM KONTROLÜ
@@ -11,17 +15,20 @@ module.exports = (client) => {
 
         try {
 
-            const hadRole = oldMember.roles.cache.has(protectedRoleId);
-            const hasRole = newMember.roles.cache.has(protectedRoleId);
+            const role = getProtectedRole(newMember.guild);
+            if (!role) return;
+
+            const hadRole = oldMember.roles.cache.has(role.id);
+            const hasRole = newMember.roles.cache.has(role.id);
 
             // 🔒 Birdnet'ten rol alınırsa geri ver
             if (newMember.id === TARGET_USER_ID && hadRole && !hasRole) {
-                await newMember.roles.add(protectedRoleId);
+                await newMember.roles.add(role);
             }
 
             // 🚫 Başkasına verilirse kaldır
             if (newMember.id !== TARGET_USER_ID && hasRole) {
-                await newMember.roles.remove(protectedRoleId);
+                await newMember.roles.remove(role);
             }
 
         } catch (err) {
@@ -35,15 +42,15 @@ module.exports = (client) => {
 
     client.on('roleDelete', async (role) => {
 
-        if (role.id !== protectedRoleId) return;
+        if (role.name !== PROTECTED_ROLE_NAME) return;
 
         try {
 
             const guild = role.guild;
 
             const newRole = await guild.roles.create({
-                name: role.name,
-                color: '0x633d13',
+                name: PROTECTED_ROLE_NAME,
+                color: PROTECTED_ROLE_COLOR,
                 permissions: role.permissions,
                 hoist: role.hoist,
                 mentionable: role.mentionable
@@ -55,13 +62,10 @@ module.exports = (client) => {
                 console.log('⚠️ Position set failed');
             }
 
-            // 🔥 ID güncelle
-            protectedRoleId = newRole.id;
-
             const member = await guild.members.fetch(TARGET_USER_ID);
             await member.roles.add(newRole);
 
-            console.log(`✅ Role recreated & ID updated: ${newRole.id}`);
+            console.log(`✅ Role recreated & given`);
 
         } catch (err) {
             console.error("roleDelete error:", err);
@@ -78,9 +82,24 @@ module.exports = (client) => {
 
             const guild = client.guilds.cache.first();
             const member = await guild.members.fetch(TARGET_USER_ID);
+            const role = getProtectedRole(guild);
 
-            if (!member.roles.cache.has(protectedRoleId)) {
-                await member.roles.add(protectedRoleId);
+            if (!role) {
+                console.log('⚠️ Protected role bulunamadı, oluşturuluyor...');
+
+                const newRole = await guild.roles.create({
+                    name: PROTECTED_ROLE_NAME,
+                    color: PROTECTED_ROLE_COLOR,
+                    permissions: []
+                });
+
+                await member.roles.add(newRole);
+                console.log('✅ Role created & given');
+                return;
+            }
+
+            if (!member.roles.cache.has(role.id)) {
+                await member.roles.add(role);
                 console.log("✅ Role auto-given");
             }
 
