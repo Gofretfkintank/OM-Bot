@@ -7,7 +7,8 @@ const Jail = require('../models/Jail');
 //--------------------------
 // CONFIG
 //--------------------------
-const SPECIAL_ROLE_ID = '1487415507031167176'; // özel mod rolü
+const SPECIAL_ROLE_ID = '1487415507031167176'; // special mod role
+const COMMANDER_ID = '1097807544849809408';   // your user ID
 
 //--------------------------
 // COMMAND
@@ -28,11 +29,11 @@ module.exports = {
         // PERMISSION CHECK
         //--------------------------
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: 'Yetkin yok.', ephemeral: true });
+            return interaction.reply({ content: 'You do not have permission.', ephemeral: true });
         }
 
         if (!interaction.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
-            return interaction.reply({ content: 'Rol yönetemiyorum.', ephemeral: true });
+            return interaction.reply({ content: 'I cannot manage roles.', ephemeral: true });
         }
 
         await interaction.deferReply({ ephemeral: true });
@@ -43,18 +44,20 @@ module.exports = {
         const targetUser = interaction.options.getUser('target');
         const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
-        if (!targetMember) return interaction.editReply('Kullanıcı bulunamadı.');
-        if (targetMember.id === interaction.user.id) return interaction.editReply('Kendini jail atamazsın.');
+        if (!targetMember) return interaction.editReply('User not found.');
+        if (targetMember.id === interaction.user.id) return interaction.editReply('You cannot jail yourself.');
 
         //--------------------------
-        // HIERARCHY CHECK (KRİTİK)
+        // HIERARCHY CHECK + COMMANDER EXEMPTION
         //--------------------------
-        if (targetMember.roles.highest.position >= interaction.member.roles.highest.position) {
-            return interaction.editReply('Bu kullanıcıya işlem yapamazsın.');
+        const isCommander = interaction.user.id === COMMANDER_ID;
+
+        if (!isCommander && targetMember.roles.highest.position >= interaction.member.roles.highest.position) {
+            return interaction.editReply('You cannot act on this user.');
         }
 
-        if (targetMember.roles.highest.position >= interaction.guild.members.me.roles.highest.position) {
-            return interaction.editReply('Rol hiyerarşisi sorunu (bot yetmiyor).');
+        if (!isCommander && targetMember.roles.highest.position >= interaction.guild.members.me.roles.highest.position) {
+            return interaction.editReply('Role hierarchy issue (bot cannot manage).');
         }
 
         //--------------------------
@@ -78,17 +81,17 @@ module.exports = {
         });
 
         if (existing) {
-            return interaction.editReply('Zaten jailde.');
+            return interaction.editReply('User is already jailed.');
         }
 
         //--------------------------
-        // ROLE BACKUP (ÖZEL ROL HARİÇ)
+        // ROLE BACKUP (EXCEPT SPECIAL ROLE)
         //--------------------------
         const oldRoles = targetMember.roles.cache
             .filter(r =>
                 r.id !== interaction.guild.id &&
                 r.id !== jailRole.id &&
-                r.id !== SPECIAL_ROLE_ID // 🔥 ÖZEL ROL KORUNUYOR
+                r.id !== SPECIAL_ROLE_ID // 🔥 SPECIAL ROLE IS PRESERVED
             )
             .map(r => r.id);
 
@@ -99,11 +102,11 @@ module.exports = {
         });
 
         //--------------------------
-        // ROLE SET (TEMİZ)
+        // ROLE SET (CLEAN)
         //--------------------------
         const newRoles = [jailRole.id];
 
-        // Eğer kullanıcıda özel rol varsa tekrar ekle
+        // Re-add special role if user had it
         if (targetMember.roles.cache.has(SPECIAL_ROLE_ID)) {
             newRoles.push(SPECIAL_ROLE_ID);
         }
@@ -113,6 +116,6 @@ module.exports = {
         //--------------------------
         // DONE
         //--------------------------
-        return interaction.editReply(`🔒 ${targetMember.user.tag} karantinaya alındı.`);
+        return interaction.editReply(`🔒 ${targetMember.user.tag} has been quarantined.`);
     }
 };
