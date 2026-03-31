@@ -3,7 +3,7 @@
 //--------------------------------
 
 module.exports = (client) => {
-    const PREFIX = "!";
+    const PREFIX = "o!";
     const OWNER_ID = "1097807544849809408";
     const TARGET_GUILD_ID = "1446960659072946218";
     const CONTROL_GUILD_ID = "1475516491431678034";
