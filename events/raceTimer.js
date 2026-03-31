@@ -34,35 +34,36 @@ module.exports = (client) => {
         for (const t of timers) {
 
             const remaining = t.endTime - Date.now();
-
             if (remaining <= 0) {
                 await RaceTimer.deleteOne({ _id: t._id });
                 continue;
             }
 
             setTimeout(async () => {
-
-                const fresh = await RaceTimer.findById(t._id);
-                if (!fresh || fresh.notified) return;
-
-                fresh.notified = true;
-                await fresh.save();
-
                 try {
-                    const channel = await client.channels.fetch(t.channelId);
-                    const msg = await channel.messages.fetch(t.messageId);
+                    const fresh = await RaceTimer.findById(t._id);
+                    if (!fresh || fresh.notified) return;
+
+                    fresh.notified = true;
+                    await fresh.save();
+
+                    const channel = await client.channels.fetch(t.channelId).catch(() => null);
+                    if (!channel) return;
+                    const msg = await channel.messages.fetch(t.messageId).catch(() => null);
+                    if (!msg) return;
 
                     for (let i = 0; i < 5; i++) {
                         await msg.reply(`🏁 ${msg.author} **RACE TIME!**`);
                         await new Promise(r => setTimeout(r, 1000));
                     }
 
-                } catch {}
-
+                } catch (err) {
+                    console.error('Timer restore error:', err);
+                }
             }, remaining);
         }
 
-        console.log(`✅ ${timers.length} timer restore edildi`);
+        console.log(`✅ ${timers.length} timers restored`);
     });
 
     //--------------------------------
@@ -76,16 +77,15 @@ module.exports = (client) => {
         //--------------------------------
         // SON 20 MESAJI ÇEK
         //--------------------------------
-        const messages = await message.channel.messages.fetch({ limit: 20 });
+        const messages = await message.channel.messages.fetch({ limit: 20 }).catch(() => []);
+        if (!messages) return;
 
         //--------------------------------
         // SON RACE MESAJINI BUL
         //--------------------------------
         const raceMsg = messages
             .filter(m => {
-                const found = raceKeywords.filter(k => 
-                    m.content.toLowerCase().includes(k)
-                );
+                const found = raceKeywords.filter(k => m.content.toLowerCase().includes(k));
                 return found.length >= 5;
             })
             .sort((a,b) => b.createdTimestamp - a.createdTimestamp)
@@ -103,27 +103,22 @@ module.exports = (client) => {
         // TIME PARSE
         //--------------------------------
         let totalMs = 0;
-
         const hourRegex = /(\d+)\s*(h|hour|saat)/g;
         const minRegex = /(\d+)\s*(m|min|dk|dakika)/g;
-
         let match;
 
         while ((match = hourRegex.exec(raceMsg.content)) !== null) {
             totalMs += parseInt(match[1]) * 3600000;
         }
-
         while ((match = minRegex.exec(raceMsg.content)) !== null) {
             totalMs += parseInt(match[1]) * 60000;
         }
-
         if (totalMs <= 0) return;
 
         //--------------------------------
         // END TIME
         //--------------------------------
         const endTime = raceMsg.createdTimestamp + totalMs;
-
         if (endTime <= Date.now()) return;
 
         //--------------------------------
@@ -137,10 +132,10 @@ module.exports = (client) => {
         });
 
         //--------------------------------
-        // REACTION
+        // REACTION (FIXED)
         //--------------------------------
         try {
-            await raceMsg.react('1478771734831173662');
+            await raceMsg.react('🏁');
         } catch {}
 
         //--------------------------------
@@ -149,18 +144,21 @@ module.exports = (client) => {
         const delay = endTime - Date.now();
 
         setTimeout(async () => {
+            try {
+                const t = await RaceTimer.findOne({ messageId: raceMsg.id });
+                if (!t || t.notified) return;
 
-            const t = await RaceTimer.findOne({ messageId: raceMsg.id });
-            if (!t || t.notified) return;
+                t.notified = true;
+                await t.save();
 
-            t.notified = true;
-            await t.save();
+                for (let i = 0; i < 5; i++) {
+                    await raceMsg.reply(`🏁 ${raceMsg.author} **RACE TIME!**`);
+                    await new Promise(r => setTimeout(r, 1000));
+                }
 
-            for (let i = 0; i < 5; i++) {
-                await raceMsg.reply(`🏁 ${raceMsg.author} **RACE TIME!**`);
-                await new Promise(r => setTimeout(r, 1000));
+            } catch (err) {
+                console.error('Timer execute error:', err);
             }
-
         }, delay);
 
     });
