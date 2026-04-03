@@ -1,0 +1,425 @@
+//--------------------------------
+// IMPORTS
+//--------------------------------
+const { SlashCommandBuilder } = require('discord.js');
+
+//--------------------------------
+// SABIT: Yarış saati (PKT = UTC+5)
+// Her zaman 18:00 PKT = 13:00 UTC
+//--------------------------------
+const RACE_HOUR_UTC = 13; // 18:00 PKT
+
+//--------------------------------
+// ÜLKE → IANA TIMEZONE EŞLEŞMELERİ
+// (tüm dünya ülkeleri)
+//--------------------------------
+const COUNTRY_TIMEZONES = {
+    // A
+    afghanistan: 'Asia/Kabul',
+    albania: 'Europe/Tirane',
+    algeria: 'Africa/Algiers',
+    andorra: 'Europe/Andorra',
+    angola: 'Africa/Luanda',
+    'antigua and barbuda': 'America/Antigua',
+    argentina: 'America/Argentina/Buenos_Aires',
+    armenia: 'Asia/Yerevan',
+    australia: 'Australia/Sydney',
+    austria: 'Europe/Vienna',
+    azerbaijan: 'Asia/Baku',
+
+    // B
+    bahamas: 'America/Nassau',
+    bahrain: 'Asia/Bahrain',
+    bangladesh: 'Asia/Dhaka',
+    barbados: 'America/Barbados',
+    belarus: 'Europe/Minsk',
+    belgium: 'Europe/Brussels',
+    belize: 'America/Belize',
+    benin: 'Africa/Porto-Novo',
+    bhutan: 'Asia/Thimphu',
+    bolivia: 'America/La_Paz',
+    'bosnia and herzegovina': 'Europe/Sarajevo',
+    botswana: 'Africa/Gaborone',
+    brazil: 'America/Sao_Paulo',
+    brunei: 'Asia/Brunei',
+    bulgaria: 'Europe/Sofia',
+    'burkina faso': 'Africa/Ouagadougou',
+    burundi: 'Africa/Bujumbura',
+
+    // C
+    'cabo verde': 'Atlantic/Cape_Verde',
+    'cape verde': 'Atlantic/Cape_Verde',
+    cambodia: 'Asia/Phnom_Penh',
+    cameroon: 'Africa/Douala',
+    canada: 'America/Toronto',
+    'central african republic': 'Africa/Bangui',
+    chad: 'Africa/Ndjamena',
+    chile: 'America/Santiago',
+    china: 'Asia/Shanghai',
+    colombia: 'America/Bogota',
+    comoros: 'Indian/Comoro',
+    congo: 'Africa/Brazzaville',
+    'costa rica': 'America/Costa_Rica',
+    croatia: 'Europe/Zagreb',
+    cuba: 'America/Havana',
+    cyprus: 'Asia/Nicosia',
+    'czech republic': 'Europe/Prague',
+    czechia: 'Europe/Prague',
+
+    // D
+    denmark: 'Europe/Copenhagen',
+    djibouti: 'Africa/Djibouti',
+    dominica: 'America/Dominica',
+    'dominican republic': 'America/Santo_Domingo',
+    'dr congo': 'Africa/Kinshasa',
+
+    // E
+    ecuador: 'America/Guayaquil',
+    egypt: 'Africa/Cairo',
+    'el salvador': 'America/El_Salvador',
+    'equatorial guinea': 'Africa/Malabo',
+    eritrea: 'Africa/Asmara',
+    estonia: 'Europe/Tallinn',
+    eswatini: 'Africa/Mbabane',
+    ethiopia: 'Africa/Addis_Ababa',
+
+    // F
+    fiji: 'Pacific/Fiji',
+    finland: 'Europe/Helsinki',
+    france: 'Europe/Paris',
+
+    // G
+    gabon: 'Africa/Libreville',
+    gambia: 'Africa/Banjul',
+    georgia: 'Asia/Tbilisi',
+    germany: 'Europe/Berlin',
+    ghana: 'Africa/Accra',
+    greece: 'Europe/Athens',
+    grenada: 'America/Grenada',
+    guatemala: 'America/Guatemala',
+    guinea: 'Africa/Conakry',
+    'guinea-bissau': 'Africa/Bissau',
+    guyana: 'America/Guyana',
+
+    // H
+    haiti: 'America/Port-au-Prince',
+    honduras: 'America/Tegucigalpa',
+    hungary: 'Europe/Budapest',
+
+    // I
+    iceland: 'Atlantic/Reykjavik',
+    india: 'Asia/Kolkata',
+    indonesia: 'Asia/Jakarta',
+    iran: 'Asia/Tehran',
+    iraq: 'Asia/Baghdad',
+    ireland: 'Europe/Dublin',
+    israel: 'Asia/Jerusalem',
+    italy: 'Europe/Rome',
+    'ivory coast': 'Africa/Abidjan',
+
+    // J
+    jamaica: 'America/Jamaica',
+    japan: 'Asia/Tokyo',
+    jordan: 'Asia/Amman',
+
+    // K
+    kazakhstan: 'Asia/Almaty',
+    kenya: 'Africa/Nairobi',
+    kiribati: 'Pacific/Tarawa',
+    kuwait: 'Asia/Kuwait',
+    kyrgyzstan: 'Asia/Bishkek',
+
+    // L
+    laos: 'Asia/Vientiane',
+    latvia: 'Europe/Riga',
+    lebanon: 'Asia/Beirut',
+    lesotho: 'Africa/Maseru',
+    liberia: 'Africa/Monrovia',
+    libya: 'Africa/Tripoli',
+    liechtenstein: 'Europe/Vaduz',
+    lithuania: 'Europe/Vilnius',
+    luxembourg: 'Europe/Luxembourg',
+
+    // M
+    madagascar: 'Indian/Antananarivo',
+    malawi: 'Africa/Blantyre',
+    malaysia: 'Asia/Kuala_Lumpur',
+    maldives: 'Indian/Maldives',
+    mali: 'Africa/Bamako',
+    malta: 'Europe/Malta',
+    'marshall islands': 'Pacific/Majuro',
+    mauritania: 'Africa/Nouakchott',
+    mauritius: 'Indian/Mauritius',
+    mexico: 'America/Mexico_City',
+    micronesia: 'Pacific/Pohnpei',
+    moldova: 'Europe/Chisinau',
+    monaco: 'Europe/Monaco',
+    mongolia: 'Asia/Ulaanbaatar',
+    montenegro: 'Europe/Podgorica',
+    morocco: 'Africa/Casablanca',
+    mozambique: 'Africa/Maputo',
+    myanmar: 'Asia/Rangoon',
+
+    // N
+    namibia: 'Africa/Windhoek',
+    nauru: 'Pacific/Nauru',
+    nepal: 'Asia/Kathmandu',
+    netherlands: 'Europe/Amsterdam',
+    'new zealand': 'Pacific/Auckland',
+    nicaragua: 'America/Managua',
+    niger: 'Africa/Niamey',
+    nigeria: 'Africa/Lagos',
+    'north korea': 'Asia/Pyongyang',
+    'north macedonia': 'Europe/Skopje',
+    norway: 'Europe/Oslo',
+
+    // O
+    oman: 'Asia/Muscat',
+
+    // P
+    pakistan: 'Asia/Karachi',
+    palau: 'Pacific/Palau',
+    panama: 'America/Panama',
+    'papua new guinea': 'Pacific/Port_Moresby',
+    paraguay: 'America/Asuncion',
+    peru: 'America/Lima',
+    philippines: 'Asia/Manila',
+    poland: 'Europe/Warsaw',
+    portugal: 'Europe/Lisbon',
+
+    // Q
+    qatar: 'Asia/Qatar',
+
+    // R
+    romania: 'Europe/Bucharest',
+    russia: 'Europe/Moscow',
+    rwanda: 'Africa/Kigali',
+
+    // S
+    'saint kitts and nevis': 'America/St_Kitts',
+    'saint lucia': 'America/St_Lucia',
+    'saint vincent and the grenadines': 'America/St_Vincent',
+    samoa: 'Pacific/Apia',
+    'san marino': 'Europe/San_Marino',
+    'sao tome and principe': 'Africa/Sao_Tome',
+    'saudi arabia': 'Asia/Riyadh',
+    senegal: 'Africa/Dakar',
+    serbia: 'Europe/Belgrade',
+    seychelles: 'Indian/Mahe',
+    'sierra leone': 'Africa/Freetown',
+    singapore: 'Asia/Singapore',
+    slovakia: 'Europe/Bratislava',
+    slovenia: 'Europe/Ljubljana',
+    'solomon islands': 'Pacific/Guadalcanal',
+    somalia: 'Africa/Mogadishu',
+    'south africa': 'Africa/Johannesburg',
+    'south korea': 'Asia/Seoul',
+    'south sudan': 'Africa/Juba',
+    spain: 'Europe/Madrid',
+    'sri lanka': 'Asia/Colombo',
+    sudan: 'Africa/Khartoum',
+    suriname: 'America/Paramaribo',
+    sweden: 'Europe/Stockholm',
+    switzerland: 'Europe/Zurich',
+    syria: 'Asia/Damascus',
+
+    // T
+    taiwan: 'Asia/Taipei',
+    tajikistan: 'Asia/Dushanbe',
+    tanzania: 'Africa/Dar_es_Salaam',
+    thailand: 'Asia/Bangkok',
+    'timor-leste': 'Asia/Dili',
+    togo: 'Africa/Lome',
+    tonga: 'Pacific/Tongatapu',
+    'trinidad and tobago': 'America/Port_of_Spain',
+    tunisia: 'Africa/Tunis',
+    turkey: 'Europe/Istanbul',
+    turkmenistan: 'Asia/Ashgabat',
+    tuvalu: 'Pacific/Funafuti',
+
+    // U
+    uganda: 'Africa/Kampala',
+    ukraine: 'Europe/Kiev',
+    'united arab emirates': 'Asia/Dubai',
+    uae: 'Asia/Dubai',
+    'united kingdom': 'Europe/London',
+    uk: 'Europe/London',
+    'united states': 'America/New_York',
+    usa: 'America/New_York',
+    uruguay: 'America/Montevideo',
+    uzbekistan: 'Asia/Tashkent',
+
+    // V
+    vanuatu: 'Pacific/Efate',
+    venezuela: 'America/Caracas',
+    vietnam: 'Asia/Ho_Chi_Minh',
+
+    // Y
+    yemen: 'Asia/Aden',
+
+    // Z
+    zambia: 'Africa/Lusaka',
+    zimbabwe: 'Africa/Harare',
+};
+
+//--------------------------------
+// YARDIMCI: UTC offset'i okunabilir formata çevir
+//--------------------------------
+function formatOffset(offsetMinutes) {
+    const sign = offsetMinutes >= 0 ? '+' : '-';
+    const abs = Math.abs(offsetMinutes);
+    const h = Math.floor(abs / 60);
+    const m = abs % 60;
+    return m === 0 ? `UTC${sign}${h}` : `UTC${sign}${h}:${String(m).padStart(2, '0')}`;
+}
+
+//--------------------------------
+// YARDIMCI: Belirli bir timezone'da saati formatla
+//--------------------------------
+function getTimeInZone(utcHour, utcMinute, timezone) {
+    // Bugünün tarihini kullan, sadece saat önemli
+    const now = new Date();
+    const raceUTC = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        utcHour,
+        utcMinute,
+        0
+    ));
+
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        weekday: 'short'
+    });
+
+    const offsetFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        timeZoneName: 'shortOffset'
+    });
+
+    // Offset'i bul
+    const parts = offsetFormatter.formatToParts(raceUTC);
+    const tzName = parts.find(p => p.type === 'timeZoneName')?.value || '';
+    const offsetMatch = tzName.match(/GMT([+-]\d{1,2}(?::\d{2})?)?/);
+    let offsetStr = 'UTC+0';
+    if (offsetMatch) {
+        offsetStr = offsetMatch[0].replace('GMT', 'UTC');
+        if (offsetStr === 'UTC') offsetStr = 'UTC+0';
+    }
+
+    return {
+        localTime: formatter.format(raceUTC),
+        offset: offsetStr,
+        timestamp: Math.floor(raceUTC.getTime() / 1000)
+    };
+}
+
+//--------------------------------
+// KOMUT
+//--------------------------------
+module.exports = {
+    data: new SlashCommandBuilder()
+        .setName('racetime')
+        .setDescription('Shows the race time (6 PM PKT) in any country\'s local time')
+        .addStringOption(opt =>
+            opt.setName('country')
+                .setDescription('Country name (e.g. italy, germany, usa)')
+                .setRequired(true)
+        )
+        .addIntegerOption(opt =>
+            opt.setName('hour')
+                .setDescription('Custom PKT hour (default: 18 = 6 PM PKT)')
+                .setRequired(false)
+                .setMinValue(0)
+                .setMaxValue(23)
+        )
+        .addIntegerOption(opt =>
+            opt.setName('minute')
+                .setDescription('Custom PKT minute (default: 0)')
+                .setRequired(false)
+                .setMinValue(0)
+                .setMaxValue(59)
+        ),
+
+    async execute(interaction) {
+        const countryInput = interaction.options.getString('country').trim().toLowerCase();
+        const pktHour = interaction.options.getInteger('hour') ?? 18;   // default 6 PM
+        const pktMinute = interaction.options.getInteger('minute') ?? 0;
+
+        // PKT = UTC+5 → UTC'ye çevir
+        const utcHour = ((pktHour - 5) % 24 + 24) % 24;
+        const utcMinute = pktMinute;
+
+        // Ülkeyi bul (kısmi eşleşme de desteklenir)
+        let timezone = COUNTRY_TIMEZONES[countryInput];
+
+        // Tam eşleşme yoksa kısmi ara
+        if (!timezone) {
+            const match = Object.keys(COUNTRY_TIMEZONES).find(k => k.includes(countryInput) || countryInput.includes(k));
+            if (match) timezone = COUNTRY_TIMEZONES[match];
+        }
+
+        if (!timezone) {
+            const suggestions = Object.keys(COUNTRY_TIMEZONES)
+                .filter(k => k.startsWith(countryInput[0]))
+                .slice(0, 5)
+                .map(k => `\`${k}\``)
+                .join(', ');
+
+            return interaction.reply({
+                content: `❌ **"${countryInput}"** not found in the country list.\n${suggestions ? `💡 Did you mean: ${suggestions}?` : 'Please use a valid country name in English.'}`,
+                ephemeral: true
+            });
+        }
+
+        let timeData;
+        try {
+            timeData = getTimeInZone(utcHour, utcMinute, timezone);
+        } catch (e) {
+            return interaction.reply({
+                content: `⚠️ Could not calculate time for **${countryInput}**. Please try again.`,
+                ephemeral: true
+            });
+        }
+
+        // Ülke adını güzelleştir
+        const displayCountry = countryInput
+            .split(' ')
+            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+
+        const pktDisplay = `${String(pktHour).padStart(2, '0')}:${String(pktMinute).padStart(2, '0')} PKT`;
+
+        await interaction.reply({
+            embeds: [{
+                color: 0xe8003d,  // OM kırmızısı
+                title: '🏁 Race Time Converter',
+                description: `The race starts at **${pktDisplay}** (Pakistan Time)\nHere's when that is for **${displayCountry}**:`,
+                fields: [
+                    {
+                        name: '🕐 Local Time',
+                        value: `**${timeData.localTime}**`,
+                        inline: true
+                    },
+                    {
+                        name: '🌍 Timezone',
+                        value: `\`${timeData.offset}\``,
+                        inline: true
+                    },
+                    {
+                        name: '⏰ Discord Timestamp',
+                        value: `<t:${timeData.timestamp}:t> (<t:${timeData.timestamp}:R>)`,
+                        inline: false
+                    }
+                ],
+                footer: {
+                    text: 'Default race time is always 6:00 PM PKT (UTC+5) • Use /racetime <country> to check'
+                }
+            }]
+        });
+    }
+};
