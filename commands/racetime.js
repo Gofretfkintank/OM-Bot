@@ -11,7 +11,6 @@ const RACE_HOUR_UTC = 13; // 18:00 PKT
 
 //--------------------------------
 // ÜLKE → IANA TIMEZONE EŞLEŞMELERİ
-// (tüm dünya ülkeleri)
 //--------------------------------
 const COUNTRY_TIMEZONES = {
     // A
@@ -65,6 +64,7 @@ const COUNTRY_TIMEZONES = {
     cyprus: 'Asia/Nicosia',
     'czech republic': 'Europe/Prague',
     czechia: 'Europe/Prague',
+    czech: 'Europe/Prague',
 
     // D
     denmark: 'Europe/Copenhagen',
@@ -105,6 +105,7 @@ const COUNTRY_TIMEZONES = {
     haiti: 'America/Port-au-Prince',
     honduras: 'America/Tegucigalpa',
     hungary: 'Europe/Budapest',
+    'hong kong': 'Asia/Hong_Kong',
 
     // I
     iceland: 'Atlantic/Reykjavik',
@@ -128,6 +129,7 @@ const COUNTRY_TIMEZONES = {
     kiribati: 'Pacific/Tarawa',
     kuwait: 'Asia/Kuwait',
     kyrgyzstan: 'Asia/Bishkek',
+    kosovo: 'Europe/Belgrade',
 
     // L
     laos: 'Asia/Vientiane',
@@ -159,6 +161,7 @@ const COUNTRY_TIMEZONES = {
     morocco: 'Africa/Casablanca',
     mozambique: 'Africa/Maputo',
     myanmar: 'Asia/Rangoon',
+    macau: 'Asia/Macau',
 
     // N
     namibia: 'Africa/Windhoek',
@@ -170,6 +173,7 @@ const COUNTRY_TIMEZONES = {
     niger: 'Africa/Niamey',
     nigeria: 'Africa/Lagos',
     'north korea': 'Asia/Pyongyang',
+    northkorea: 'Asia/Pyongyang',
     'north macedonia': 'Europe/Skopje',
     norway: 'Europe/Oslo',
 
@@ -178,6 +182,7 @@ const COUNTRY_TIMEZONES = {
 
     // P
     pakistan: 'Asia/Karachi',
+    palestine: 'Asia/Gaza',
     palau: 'Pacific/Palau',
     panama: 'America/Panama',
     'papua new guinea': 'Pacific/Port_Moresby',
@@ -214,6 +219,7 @@ const COUNTRY_TIMEZONES = {
     somalia: 'Africa/Mogadishu',
     'south africa': 'Africa/Johannesburg',
     'south korea': 'Asia/Seoul',
+    southkorea: 'Asia/Seoul',
     'south sudan': 'Africa/Juba',
     spain: 'Europe/Madrid',
     'sri lanka': 'Asia/Colombo',
@@ -234,16 +240,21 @@ const COUNTRY_TIMEZONES = {
     'trinidad and tobago': 'America/Port_of_Spain',
     tunisia: 'Africa/Tunis',
     turkey: 'Europe/Istanbul',
+    turkiye: 'Europe/Istanbul',
+    'türkiye': 'Europe/Istanbul',
     turkmenistan: 'Asia/Ashgabat',
     tuvalu: 'Pacific/Funafuti',
 
     // U
     uganda: 'Africa/Kampala',
-    ukraine: 'Europe/Kiev',
+    ukraine: 'Europe/Kyiv',
     'united arab emirates': 'Asia/Dubai',
     uae: 'Asia/Dubai',
     'united kingdom': 'Europe/London',
     uk: 'Europe/London',
+    england: 'Europe/London',
+    scotland: 'Europe/London',
+    wales: 'Europe/London',
     'united states': 'America/New_York',
     usa: 'America/New_York',
     uruguay: 'America/Montevideo',
@@ -253,6 +264,10 @@ const COUNTRY_TIMEZONES = {
     vanuatu: 'Pacific/Efate',
     venezuela: 'America/Caracas',
     vietnam: 'Asia/Ho_Chi_Minh',
+    vatican: 'Europe/Rome',
+
+    // W
+    'western sahara': 'Africa/El_Aaiun',
 
     // Y
     yemen: 'Asia/Aden',
@@ -263,21 +278,9 @@ const COUNTRY_TIMEZONES = {
 };
 
 //--------------------------------
-// YARDIMCI: UTC offset'i okunabilir formata çevir
-//--------------------------------
-function formatOffset(offsetMinutes) {
-    const sign = offsetMinutes >= 0 ? '+' : '-';
-    const abs = Math.abs(offsetMinutes);
-    const h = Math.floor(abs / 60);
-    const m = abs % 60;
-    return m === 0 ? `UTC${sign}${h}` : `UTC${sign}${h}:${String(m).padStart(2, '0')}`;
-}
-
-//--------------------------------
 // YARDIMCI: Belirli bir timezone'da saati formatla
 //--------------------------------
 function getTimeInZone(utcHour, utcMinute, timezone) {
-    // Bugünün tarihini kullan, sadece saat önemli
     const now = new Date();
     const raceUTC = new Date(Date.UTC(
         now.getUTCFullYear(),
@@ -301,10 +304,10 @@ function getTimeInZone(utcHour, utcMinute, timezone) {
         timeZoneName: 'shortOffset'
     });
 
-    // Offset'i bul
     const parts = offsetFormatter.formatToParts(raceUTC);
     const tzName = parts.find(p => p.type === 'timeZoneName')?.value || '';
     const offsetMatch = tzName.match(/GMT([+-]\d{1,2}(?::\d{2})?)?/);
+
     let offsetStr = 'UTC+0';
     if (offsetMatch) {
         offsetStr = offsetMatch[0].replace('GMT', 'UTC');
@@ -332,7 +335,7 @@ module.exports = {
         )
         .addIntegerOption(opt =>
             opt.setName('hour')
-                .setDescription('Custom PKT hour (default: 18 = 6 PM PKT)')
+                .setDescription('Custom PKT hour (default: 18)')
                 .setRequired(false)
                 .setMinValue(0)
                 .setMaxValue(23)
@@ -347,19 +350,17 @@ module.exports = {
 
     async execute(interaction) {
         const countryInput = interaction.options.getString('country').trim().toLowerCase();
-        const pktHour = interaction.options.getInteger('hour') ?? 18;   // default 6 PM
+        const pktHour = interaction.options.getInteger('hour') ?? 18;
         const pktMinute = interaction.options.getInteger('minute') ?? 0;
 
-        // PKT = UTC+5 → UTC'ye çevir
         const utcHour = ((pktHour - 5) % 24 + 24) % 24;
         const utcMinute = pktMinute;
 
-        // Ülkeyi bul (kısmi eşleşme de desteklenir)
         let timezone = COUNTRY_TIMEZONES[countryInput];
 
-        // Tam eşleşme yoksa kısmi ara
         if (!timezone) {
-            const match = Object.keys(COUNTRY_TIMEZONES).find(k => k.includes(countryInput) || countryInput.includes(k));
+            const match = Object.keys(COUNTRY_TIMEZONES)
+                .find(k => k.includes(countryInput) || countryInput.includes(k));
             if (match) timezone = COUNTRY_TIMEZONES[match];
         }
 
@@ -371,7 +372,7 @@ module.exports = {
                 .join(', ');
 
             return interaction.reply({
-                content: `❌ **"${countryInput}"** not found in the country list.\n${suggestions ? `💡 Did you mean: ${suggestions}?` : 'Please use a valid country name in English.'}`,
+                content: `❌ **"${countryInput}"** not found.\n${suggestions ? `💡 Maybe: ${suggestions}` : ''}`,
                 ephemeral: true
             });
         }
@@ -379,14 +380,13 @@ module.exports = {
         let timeData;
         try {
             timeData = getTimeInZone(utcHour, utcMinute, timezone);
-        } catch (e) {
+        } catch {
             return interaction.reply({
-                content: `⚠️ Could not calculate time for **${countryInput}**. Please try again.`,
+                content: `⚠️ Could not calculate time for **${countryInput}**.`,
                 ephemeral: true
             });
         }
 
-        // Ülke adını güzelleştir
         const displayCountry = countryInput
             .split(' ')
             .map(w => w.charAt(0).toUpperCase() + w.slice(1))
@@ -396,9 +396,9 @@ module.exports = {
 
         await interaction.reply({
             embeds: [{
-                color: 0xe8003d,  // OM kırmızısı
+                color: 0xe8003d,
                 title: '🏁 Race Time Converter',
-                description: `The race starts at **${pktDisplay}** (Pakistan Time)\nHere's when that is for **${displayCountry}**:`,
+                description: `The race starts at **${pktDisplay}** (Pakistan Time)\nFor **${displayCountry}**:`,
                 fields: [
                     {
                         name: '🕐 Local Time',
@@ -417,7 +417,7 @@ module.exports = {
                     }
                 ],
                 footer: {
-                    text: 'Default race time is always 6:00 PM PKT (UTC+5) • Use /racetime <country> to check'
+                    text: 'Default: 6:00 PM PKT (UTC+5)'
                 }
             }]
         });
