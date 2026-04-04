@@ -1,3 +1,4 @@
+
 const {
     SlashCommandBuilder,
     ActionRowBuilder,
@@ -42,7 +43,8 @@ module.exports = {
         });
 
         const msg = await interaction.reply({
-            content: '🗳️ DOTY Vote started! (1 hour)',
+            content: '@everyone 🗳️ DOTY Vote started! (1 hour)',
+            allowedMentions: { parse: ['everyone'] },
             components: [row],
             fetchReply: true
         });
