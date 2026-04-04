@@ -1,7 +1,10 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require('discord.js');
 
 //--------------------------------------------------
 //                  TRACK DATABASE
+//--------------------------------------------------
+// image_url: doğrudan PNG — Discord embed için güvenilir
+// Fallback olarak Wikipedia commons raster PNG'leri kullanıldı
 //--------------------------------------------------
 
 const TRACKS = {
@@ -16,7 +19,7 @@ const TRACKS = {
     lap_record: { time: '1:41.252', driver: 'Valtteri Bottas', year: 2018, car: 'Mercedes W09' },
     drs_zones: 2,
     category: ['F1', 'GT3', 'WEC', 'Endurance'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Circuit_de_Spa-Francorchamps.svg/1200px-Circuit_de_Spa-Francorchamps.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Belgium_Circuit.png',
     notable: 'Eau Rouge / Raidillon, Pouhon, Blanchimont',
     elevation_diff_m: 104,
     weather_city: 'Stavelot,BE',
@@ -31,7 +34,7 @@ const TRACKS = {
     lap_record: { time: '1:21.046', driver: 'Rubens Barrichello', year: 2004, car: 'Ferrari F2004' },
     drs_zones: 3,
     category: ['F1', 'GT3', 'DTM'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Monza_track_map.svg/1200px-Monza_track_map.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Italy_Circuit.png',
     notable: 'Temple of Speed, Lesmo, Parabolica',
     elevation_diff_m: 14,
     weather_city: 'Monza,IT',
@@ -46,7 +49,7 @@ const TRACKS = {
     lap_record: { time: '1:27.097', driver: 'Max Verstappen', year: 2020, car: 'Red Bull RB16' },
     drs_zones: 2,
     category: ['F1', 'GT3', 'BTCC'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Silverstone_Circuit_2020.svg/1200px-Silverstone_Circuit_2020.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Great_Britain_Circuit.png',
     notable: 'Copse, Maggotts-Becketts-Chapel, Stowe',
     elevation_diff_m: 17,
     weather_city: 'Silverstone,GB',
@@ -61,7 +64,7 @@ const TRACKS = {
     lap_record: { time: '1:30.983', driver: 'Lewis Hamilton', year: 2019, car: 'Mercedes W10' },
     drs_zones: 1,
     category: ['F1', 'Super GT', 'Super Formula'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Suzuka_circuit_map.svg/1200px-Suzuka_circuit_map.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Japan_Circuit.png',
     notable: '130R, Esses, Degner Curves',
     elevation_diff_m: 40,
     weather_city: 'Suzuka,JP',
@@ -76,7 +79,7 @@ const TRACKS = {
     lap_record: { time: '1:27.275', driver: 'Michael Schumacher', year: 2004, car: 'Ferrari F2004' },
     drs_zones: 1,
     category: ['F1', 'GT3', 'DTM', 'Endurance'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e2/Nurburgring_track_map.svg/1200px-Nurburgring_track_map.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Germany_Circuit.png',
     notable: 'Schumacher-S, Mercedes Arena, Ford Kurve',
     elevation_diff_m: 59,
     weather_city: 'Nürburg,DE',
@@ -91,7 +94,7 @@ const TRACKS = {
     lap_record: { time: '5:19.546', driver: 'Porsche 919 Hybrid Evo', year: 2018, car: 'Porsche 919 Hybrid Evo' },
     drs_zones: 0,
     category: ['GT3', 'Endurance', 'VLN', 'ADAC'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f4/Nordschleife_track_map.svg/1200px-Nordschleife_track_map.svg.png',
+    image_url: 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Nordschleife.png',
     notable: 'Green Hell — Karussell, Fuchsröhre, Brünnchen',
     elevation_diff_m: 300,
     weather_city: 'Nürburg,DE',
@@ -106,7 +109,7 @@ const TRACKS = {
     lap_record: { time: '1:10.166', driver: 'Lewis Hamilton', year: 2021, car: 'Mercedes W12' },
     drs_zones: 1,
     category: ['F1', 'Formula E', 'GT3'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Monaco_track_map.svg/1200px-Monaco_track_map.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Monaco_Circuit.png',
     notable: 'Tunnel, Loews Hairpin, Casino Square',
     elevation_diff_m: 42,
     weather_city: 'Monaco,MC',
@@ -121,7 +124,7 @@ const TRACKS = {
     lap_record: { time: '1:15.484', driver: 'Rubens Barrichello', year: 2004, car: 'Ferrari F2004' },
     drs_zones: 1,
     category: ['F1', 'Superbike', 'GT3'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Imola_track_map.svg/1200px-Imola_track_map.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Emilia_Romagna_Circuit.png',
     notable: 'Tamburello, Acque Minerali, Rivazza',
     elevation_diff_m: 26,
     weather_city: 'Imola,IT',
@@ -136,7 +139,7 @@ const TRACKS = {
     lap_record: { time: '1:10.540', driver: 'Valtteri Bottas', year: 2018, car: 'Mercedes W09' },
     drs_zones: 2,
     category: ['F1', 'Endurance'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/Interlagos_track_map.svg/1200px-Interlagos_track_map.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Brazil_Circuit.png',
     notable: 'Senna S, Curva do Sol, Juncão',
     elevation_diff_m: 37,
     weather_city: 'São Paulo,BR',
@@ -151,7 +154,7 @@ const TRACKS = {
     lap_record: { time: '1:05.619', driver: 'Carlos Sainz', year: 2020, car: 'McLaren MCL35' },
     drs_zones: 3,
     category: ['F1', 'MotoGP', 'DTM', 'GT3'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/Red_Bull_Ring_track_map.svg/1200px-Red_Bull_Ring_track_map.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Austria_Circuit.png',
     notable: 'Remus Kurve, Rindt Kurve, Red Bull Kurve',
     elevation_diff_m: 65,
     weather_city: 'Spielberg,AT',
@@ -166,7 +169,7 @@ const TRACKS = {
     lap_record: { time: '1:11.097', driver: 'Lewis Hamilton', year: 2021, car: 'Mercedes W12' },
     drs_zones: 2,
     category: ['F1', 'GT3', 'DTM'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Zandvoort_track_map.svg/1200px-Zandvoort_track_map.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Netherlands_Circuit.png',
     notable: 'Tarzan, Hugenholtz, Arie Luyendyk Banked Turn',
     elevation_diff_m: 20,
     weather_city: 'Zandvoort,NL',
@@ -181,7 +184,7 @@ const TRACKS = {
     lap_record: { time: '1:35.867', driver: 'Kevin Magnussen', year: 2018, car: 'Haas VF-18' },
     drs_zones: 3,
     category: ['F1'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Singapore_street_circuit_map.svg/1200px-Singapore_street_circuit_map.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Singapore_Circuit.png',
     notable: 'Night Race, Anderson Bridge, Turn 18',
     elevation_diff_m: 4,
     weather_city: 'Singapore,SG',
@@ -196,7 +199,7 @@ const TRACKS = {
     lap_record: { time: '1:36.169', driver: 'Charles Leclerc', year: 2019, car: 'Ferrari SF90' },
     drs_zones: 2,
     category: ['F1', 'MotoGP', 'GT3', 'IMSA'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Circuit_of_the_Americas_track_map.svg/1200px-Circuit_of_the_Americas_track_map.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/USA_Circuit.png',
     notable: 'Turn 1 Blind Crest, Esses, Back Straight',
     elevation_diff_m: 40,
     weather_city: 'Austin,US',
@@ -211,7 +214,7 @@ const TRACKS = {
     lap_record: { time: '1:31.447', driver: 'Pedro de la Rosa', year: 2005, car: 'McLaren MP4/20' },
     drs_zones: 3,
     category: ['F1', 'GT3', 'Formula E'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Bahrain_Circuit_2010.svg/1200px-Bahrain_Circuit_2010.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Bahrain_Circuit.png',
     notable: 'Turn 4, Turn 10 hairpin, Night Race possible',
     elevation_diff_m: 3,
     weather_city: 'Sakhir,BH',
@@ -226,7 +229,7 @@ const TRACKS = {
     lap_record: { time: '3:14.791', driver: 'Kamui Kobayashi', year: 2017, car: 'Toyota TS050 Hybrid' },
     drs_zones: 0,
     category: ['WEC', 'Endurance', 'GT3', 'GTE'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Le_Mans_track_map.svg/1200px-Le_Mans_track_map.svg.png',
+    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Le_Mans_track_map.svg/800px-Le_Mans_track_map.svg.png',
     notable: 'Mulsanne Straight, Porsche Curves, Ford Chicanes',
     elevation_diff_m: 67,
     weather_city: 'Le Mans,FR',
@@ -241,7 +244,7 @@ const TRACKS = {
     lap_record: { time: '1:07.012', driver: 'Oliver Askew', year: 2020, car: 'Indy Lights' },
     drs_zones: 0,
     category: ['IMSA', 'GT3', 'MotoGP', 'IndyCar'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Laguna_Seca_track_map.svg/1200px-Laguna_Seca_track_map.svg.png',
+    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Laguna_Seca_track_map.svg/800px-Laguna_Seca_track_map.svg.png',
     notable: 'The Corkscrew (Turn 8A/8B)',
     elevation_diff_m: 61,
     weather_city: 'Salinas,US',
@@ -256,7 +259,7 @@ const TRACKS = {
     lap_record: { time: '1:22.767', driver: 'Sébastien Bourdais', year: 2015, car: 'Corvette DP' },
     drs_zones: 0,
     category: ['IMSA', 'GT3', 'NASCAR', 'IndyCar'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/Watkins_Glen_track_map.svg/1200px-Watkins_Glen_track_map.svg.png',
+    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/Watkins_Glen_track_map.svg/800px-Watkins_Glen_track_map.svg.png',
     notable: 'The Boot, Esses, Toe of The Boot',
     elevation_diff_m: 73,
     weather_city: 'Watkins Glen,US',
@@ -271,7 +274,7 @@ const TRACKS = {
     lap_record: { time: '1:32.740', driver: 'Sebastian Vettel', year: 2019, car: 'Ferrari SF90' },
     drs_zones: 2,
     category: ['F1', 'GT3', 'WEC'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Paul_Ricard_Circuit_track_map.svg/1200px-Paul_Ricard_Circuit_track_map.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/France_Circuit.png',
     notable: 'Mistral Straight, Signes, Le Beausset',
     elevation_diff_m: 26,
     weather_city: 'Le Castellet,FR',
@@ -286,7 +289,7 @@ const TRACKS = {
     lap_record: { time: '1:34.223', driver: 'Juan Pablo Montoya', year: 2004, car: 'Williams FW26' },
     drs_zones: 2,
     category: ['F1', 'MotoGP', 'GT3'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Sepang_track_map.svg/1200px-Sepang_track_map.svg.png',
+    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Sepang_track_map.svg/800px-Sepang_track_map.svg.png',
     notable: 'Turn 1-2, Back Straight, Long Right-Handers',
     elevation_diff_m: 12,
     weather_city: 'Sepang,MY',
@@ -301,7 +304,7 @@ const TRACKS = {
     lap_record: { time: '1:16.627', driver: 'Lewis Hamilton', year: 2020, car: 'Mercedes W11' },
     drs_zones: 1,
     category: ['F1', 'GT3', 'DTM'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Hungaroring_track_map.svg/1200px-Hungaroring_track_map.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Hungary_Circuit.png',
     notable: 'Turn 4 hairpin, Turn 11, Monaco without walls',
     elevation_diff_m: 36,
     weather_city: 'Budapest,HU',
@@ -316,7 +319,7 @@ const TRACKS = {
     lap_record: { time: '1:18.149', driver: 'Max Verstappen', year: 2021, car: 'Red Bull RB16B' },
     drs_zones: 2,
     category: ['F1', 'MotoGP', 'GT3', 'WTCR'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/75/Circuit_de_Barcelona-Catalunya_track_map.svg/1200px-Circuit_de_Barcelona-Catalunya_track_map.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Spain_Circuit.png',
     notable: 'Turn 3, Turn 9 (La Caixa), Chicane',
     elevation_diff_m: 31,
     weather_city: 'Montmeló,ES',
@@ -331,7 +334,7 @@ const TRACKS = {
     lap_record: { time: '1:18.750', driver: 'Lewis Hamilton', year: 2020, car: 'Mercedes W11' },
     drs_zones: 3,
     category: ['F1', 'MotoGP', 'GT3', 'WSBK'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Portimao_track_map.svg/1200px-Portimao_track_map.svg.png',
+    image_url: 'https://www.formula1.com/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/Portugal_Circuit.png',
     notable: 'Blind crests, Turn 5 downhill, Roller Coaster section',
     elevation_diff_m: 104,
     weather_city: 'Portimão,PT',
@@ -346,7 +349,7 @@ const TRACKS = {
     lap_record: { time: '1:23.596', driver: 'Michael Schumacher', year: 1997, car: 'Ferrari F310B' },
     drs_zones: 1,
     category: ['MotoGP', 'WSBK', 'GT3', 'F2'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Jerez_Circuit_map.svg/1200px-Jerez_Circuit_map.svg.png',
+    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Jerez_Circuit_map.svg/800px-Jerez_Circuit_map.svg.png',
     notable: 'Curva Expo, Chicane, Peluqui',
     elevation_diff_m: 18,
     weather_city: 'Jerez de la Frontera,ES',
@@ -361,7 +364,7 @@ const TRACKS = {
     lap_record: { time: '1:17.602', driver: 'Kimi Räikkönen', year: 2020, car: 'Ferrari SF1000' },
     drs_zones: 1,
     category: ['F1', 'MotoGP', 'GT3'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Mugello_track_map.svg/1200px-Mugello_track_map.svg.png',
+    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Mugello_track_map.svg/800px-Mugello_track_map.svg.png',
     notable: 'Arrabbiata 1 & 2, San Donato, Bucine',
     elevation_diff_m: 60,
     weather_city: 'Scarperia,IT',
@@ -373,10 +376,10 @@ const TRACKS = {
     city: 'Misano Adriatico',
     length_km: 4.226,
     turns: 16,
-    lap_record: { time: '1:32.265', driver: 'Jorge Lorenzo', year: 2013, car: 'Yamaha YZR-M1 (MotoGP)' },
+    lap_record: { time: '1:32.265', driver: 'Jorge Lorenzo', year: 2013, car: 'Yamaha YZR-M1' },
     drs_zones: 0,
     category: ['MotoGP', 'WSBK', 'GT3'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Misano_World_Circuit_track_map.svg/1200px-Misano_World_Circuit_track_map.svg.png',
+    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Misano_World_Circuit_track_map.svg/800px-Misano_World_Circuit_track_map.svg.png',
     notable: 'Tamburello, Quercia, Rio',
     elevation_diff_m: 7,
     weather_city: 'Misano Adriatico,IT',
@@ -388,10 +391,10 @@ const TRACKS = {
     city: 'Daytona Beach, FL',
     length_km: 4.023,
     turns: 12,
-    lap_record: { time: '0:40.364', driver: 'Bill Elliott', year: 1987, car: 'Ford Thunderbird (Superspeedway)' },
+    lap_record: { time: '0:40.364', driver: 'Bill Elliott', year: 1987, car: 'Ford Thunderbird' },
     drs_zones: 0,
     category: ['NASCAR', 'IMSA', 'Endurance'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Daytona_road_course.svg/1200px-Daytona_road_course.svg.png',
+    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Daytona_road_course.svg/800px-Daytona_road_course.svg.png',
     notable: 'Tri-oval, Daytona 500, 24h of Daytona',
     elevation_diff_m: 5,
     weather_city: 'Daytona Beach,US',
@@ -406,7 +409,7 @@ const TRACKS = {
     lap_record: { time: '2:03.837', driver: 'Scott McLaughlin', year: 2019, car: 'Ford Mustang Supercar' },
     drs_zones: 0,
     category: ['Supercars', 'GT3', 'Endurance'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Bathurst_track_map.svg/1200px-Bathurst_track_map.svg.png',
+    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Bathurst_track_map.svg/800px-Bathurst_track_map.svg.png',
     notable: 'Mountain section, Hell Corner, The Dipper, Conrod Straight',
     elevation_diff_m: 174,
     weather_city: 'Bathurst,AU',
@@ -420,8 +423,8 @@ const TRACKS = {
     turns: 16,
     lap_record: { time: '1:28.193', driver: 'Kimi Räikkönen', year: 2007, car: 'Ferrari F2007' },
     drs_zones: 1,
-    category: ['WEC', 'Super GT', 'F1 (hist.)', 'GT3'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Fuji_speedway_track_map.svg/1200px-Fuji_speedway_track_map.svg.png',
+    category: ['WEC', 'Super GT', 'GT3'],
+    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Fuji_speedway_track_map.svg/800px-Fuji_speedway_track_map.svg.png',
     notable: 'Long back straight, 100R, Mt. Fuji backdrop',
     elevation_diff_m: 18,
     weather_city: 'Oyama,JP',
@@ -436,25 +439,10 @@ const TRACKS = {
     lap_record: { time: '1:52.498', driver: 'Jack Goff', year: 2018, car: 'Honda Civic (BTCC)' },
     drs_zones: 0,
     category: ['BTCC', 'GT3', 'Superbike'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Snetterton_Circuit_300_track_map.svg/1200px-Snetterton_Circuit_300_track_map.svg.png',
+    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Snetterton_Circuit_300_track_map.svg/800px-Snetterton_Circuit_300_track_map.svg.png',
     notable: 'Bomb Hole, Coram Curve, Russell',
     elevation_diff_m: 12,
     weather_city: 'Norwich,GB',
-  },
-  spielberg: {
-    name: 'Red Bull Ring (alternate alias)',
-    country: 'Austria',
-    flag: '🇦🇹',
-    city: 'Spielberg',
-    length_km: 4.318,
-    turns: 10,
-    lap_record: { time: '1:05.619', driver: 'Carlos Sainz', year: 2020, car: 'McLaren MCL35' },
-    drs_zones: 3,
-    category: ['F1', 'MotoGP', 'DTM', 'GT3'],
-    image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/Red_Bull_Ring_track_map.svg/1200px-Red_Bull_Ring_track_map.svg.png',
-    notable: 'Remus Kurve, Rindt Kurve, Red Bull Kurve',
-    elevation_diff_m: 65,
-    weather_city: 'Spielberg,AT',
   },
 };
 
@@ -480,6 +468,11 @@ const ALIASES = {
   'imola': 'imola',
   'interlagos': 'interlagos',
   'sao paulo': 'interlagos',
+  'saopaulo': 'interlagos',
+  'são paulo': 'interlagos',
+  'saopablo': 'interlagos',
+  'san paulo': 'interlagos',
+  'jose carlos pace': 'interlagos',
   'redbullring': 'redbullring',
   'red bull ring': 'redbullring',
   'rbr': 'redbullring',
@@ -547,6 +540,27 @@ async function getWeather(city) {
 }
 
 //--------------------------------------------------
+//              IMAGE URL VALIDATOR
+//--------------------------------------------------
+// Discord bazen bazı URL'leri embed'de göstermez.
+// Bunu önlemek için URL'yi HEAD isteğiyle kontrol edip
+// content-type image/* ise kullan, değilse null dön.
+
+async function resolveImage(url) {
+  try {
+    const res = await fetch(url, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(4000),
+    });
+    const ct = res.headers.get('content-type') ?? '';
+    if (res.ok && ct.startsWith('image/')) return url;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+//--------------------------------------------------
 //                    COMMAND
 //--------------------------------------------------
 
@@ -569,10 +583,11 @@ module.exports = {
 
     //-- Not found ──────────────────────────────
     if (!key || !TRACKS[key]) {
-      const list = Object.keys(ALIASES)
-        .filter((_, i) => i % 3 === 0) // sample every 3rd alias for brevity
-        .slice(0, 18)
-        .join(', ');
+      const samples = [
+        'spa', 'monza', 'silverstone', 'suzuka', 'nurburgring',
+        'nordschleife', 'monaco', 'imola', 'interlagos', 'lemans',
+        'cota', 'bahrain', 'bathurst', 'fuji', 'daytona',
+      ].join(', ');
 
       return interaction.editReply({
         embeds: [
@@ -580,16 +595,21 @@ module.exports = {
             .setColor(0xe74c3c)
             .setTitle('❌ Circuit Not Found')
             .setDescription(
-              `No circuit matched **"${query}"**.\n\nTry: \`${list}\`…`
+              `No circuit matched **"${query}"**.\n\n**Available:** \`${samples}\`…`
             ),
         ],
       });
     }
 
     const t = TRACKS[key];
-    const weather = await getWeather(t.weather_city);
 
-    //-- Weather field text ─────────────────────
+    //-- Parallel fetch: weather + image check ──
+    const [weather, validImage] = await Promise.all([
+      getWeather(t.weather_city),
+      resolveImage(t.image_url),
+    ]);
+
+    //-- Weather field ──────────────────────────
     let weatherText;
     if (weather) {
       weatherText =
@@ -610,7 +630,6 @@ module.exports = {
       .setColor(0x0c9978)
       .setTitle(`${t.flag}  ${t.name}`)
       .setDescription(`${categories}\n📍 ${t.city}, ${t.country}`)
-      .setImage(t.image_url)
       .addFields(
         {
           name: '📐 Circuit Stats',
@@ -648,6 +667,11 @@ module.exports = {
       )
       .setFooter({ text: 'Olzhasstik Motorsports • /track' })
       .setTimestamp();
+
+    //-- Resim varsa ekle ───────────────────────
+    if (validImage) {
+      embed.setImage(validImage);
+    }
 
     await interaction.editReply({ embeds: [embed] });
   },
