@@ -7,8 +7,9 @@ aptPkgs = [
     "libgif-dev",
     "librsvg2-dev",
     "pkg-config",
-    "fontconfig",           # ← Fontconfig'i aktif eder
-    "fonts-dejavu",         # ← En çok işe yarayan Sans fontu
-    "fonts-liberation",     # ← Ekstra güvenli fallback
-    "fonts-noto"            # ← Daha modern ve geniş destek (önerilir)
+    "fontconfig",
+    "fonts-dejavu",
+    "fonts-liberation",
+    "fonts-noto",
+    "fonts-roboto"
 ]
