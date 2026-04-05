@@ -61,14 +61,15 @@ function drawRing(ctx, cx, cy, r, pct, color) {
     ctx.stroke();
     ctx.lineCap = 'butt';
 
+    // Font düzeltmesi
     ctx.fillStyle = color;
-    ctx.font = 'bold 28px Sans';
+    ctx.font = 'bold 28px DejaVu Sans';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(pct), cx, cy - 8);
 
     ctx.fillStyle = '#888888';
-    ctx.font = '13px Sans';
+    ctx.font = '13px DejaVu Sans';
     ctx.fillText('OVERALL', cx, cy + 16);
 }
 
@@ -82,17 +83,17 @@ function drawStatRow(ctx, y, label, v1, v2, winner) {
     ctx.textBaseline = 'middle';
 
     ctx.fillStyle = c1;
-    ctx.font = 'bold 18px Sans';
+    ctx.font = 'bold 18px DejaVu Sans';
     ctx.textAlign = 'right';
     ctx.fillText(String(v1), 175, y);
 
     ctx.fillStyle = '#888888';
-    ctx.font = '14px Sans';
+    ctx.font = '14px DejaVu Sans';
     ctx.textAlign = 'center';
     ctx.fillText(label, 350, y);
 
     ctx.fillStyle = c2;
-    ctx.font = 'bold 18px Sans';
+    ctx.font = 'bold 18px DejaVu Sans';
     ctx.textAlign = 'left';
     ctx.fillText(String(v2), 525, y);
 }
@@ -120,14 +121,16 @@ function buildImage(u1, d1, ov1, u2, d2, ov2) {
     ctx.lineTo(350, 490);
     ctx.stroke();
 
+    // VS yazısı
     ctx.fillStyle = '#E10600';
-    ctx.font = 'bold 22px Sans';
+    ctx.font = 'bold 22px DejaVu Sans';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('VS', 350, 35);
 
+    // Kullanıcı isimleri
     ctx.fillStyle = col1;
-    ctx.font = 'bold 22px Sans';
+    ctx.font = 'bold 22px DejaVu Sans';
     ctx.textAlign = 'center';
     ctx.fillText(u1.username, 175, 80);
 
@@ -151,8 +154,9 @@ function buildImage(u1, d1, ov1, u2, d2, ov2) {
     drawStatRow(ctx, 430, 'DNF',     dn1,  dn2,  cmp(dn2,dn1));
     drawStatRow(ctx, 460, 'WDC',     wdc1, wdc2, cmp(wdc1,wdc2));
 
+    // Footer
     ctx.fillStyle = '#444444';
-    ctx.font = '12px Sans';
+    ctx.font = '12px DejaVu Sans';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Olzhasstik Motorsports', 350, 535);
@@ -181,13 +185,13 @@ module.exports = {
         const u2 = interaction.options.getUser('pilot2');
 
         if (u1.id === u2.id)
-            return interaction.editReply('❌ Same user');
+            return interaction.editReply('❌ Aynı kullanıcıyı karşılaştıramazsın');
 
         const d1 = await Driver.findOne({ userId: u1.id });
         const d2 = await Driver.findOne({ userId: u2.id });
 
         if (!d1 || !d2)
-            return interaction.editReply('❌ Driver not found');
+            return interaction.editReply('❌ Sürücülerden biri veritabanında bulunamadı');
 
         const ov1 = calcOverall(d1);
         const ov2 = calcOverall(d2);
