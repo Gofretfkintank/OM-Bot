@@ -1,9 +1,2 @@
 [phases.setup]
-aptPkgs = ["fontconfig", "fonts-dejavu-core", "fonts-dejavu-extra"]
-
-[phases.build]
-cmds = ["fc-cache -f -v"]
-
-[variables]
-FONTCONFIG_PATH = "/etc/fonts"
-FONTCONFIG_FILE = "/etc/fonts/fonts.conf"
+aptPkgs = ["build-essential", "libcairo2-dev", "libpango1.0-dev", "libjpeg-dev", "libgif-dev", "librsvg2-dev", "pkg-config"]
