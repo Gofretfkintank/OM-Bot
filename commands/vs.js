@@ -3,7 +3,22 @@
 //--------------------------------
 const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
 const Driver = require('../models/Driver');
-const { createCanvas } = require('canvas');
+const { createCanvas, registerFont } = require('canvas');
+const path = require('path');
+
+// Register system fonts once (at module load)
+try {
+    // Common system fonts on Linux after installing fonts-dejavu
+    registerFont('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', { 
+        family: 'DejaVu Sans', 
+        weight: 'bold' 
+    });
+    registerFont('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', { 
+        family: 'DejaVu Sans' 
+    });
+} catch (err) {
+    console.warn('Could not register DejaVuSans font, falling back to sans-serif');
+}
 
 //--------------------------------
 // OVERALL CALCULATION
@@ -63,16 +78,16 @@ function drawRing(ctx, cx, cy, r, pct, color) {
     ctx.stroke();
     ctx.lineCap = 'butt';
 
-    // Percentage text
+    // Percentage
     ctx.fillStyle = color;
-    ctx.font = 'bold 28px DejaVu Sans';
+    ctx.font = 'bold 28px "DejaVu Sans"';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(pct), cx, cy - 8);
 
-    // Overall label
+    // Label
     ctx.fillStyle = '#888888';
-    ctx.font = '13px DejaVu Sans';
+    ctx.font = '13px "DejaVu Sans"';
     ctx.fillText('OVERALL', cx, cy + 16);
 }
 
@@ -86,17 +101,17 @@ function drawStatRow(ctx, y, label, v1, v2, winner) {
     ctx.textBaseline = 'middle';
 
     ctx.fillStyle = c1;
-    ctx.font = 'bold 18px DejaVu Sans';
+    ctx.font = 'bold 18px "DejaVu Sans"';
     ctx.textAlign = 'right';
     ctx.fillText(String(v1), 175, y);
 
     ctx.fillStyle = '#888888';
-    ctx.font = '14px DejaVu Sans';
+    ctx.font = '14px "DejaVu Sans"';
     ctx.textAlign = 'center';
     ctx.fillText(label, 350, y);
 
     ctx.fillStyle = c2;
-    ctx.font = 'bold 18px DejaVu Sans';
+    ctx.font = 'bold 18px "DejaVu Sans"';
     ctx.textAlign = 'left';
     ctx.fillText(String(v2), 525, y);
 }
@@ -127,16 +142,16 @@ function buildImage(u1, d1, ov1, u2, d2, ov2) {
     ctx.lineTo(350, 490);
     ctx.stroke();
 
-    // VS title
+    // VS
     ctx.fillStyle = '#E10600';
-    ctx.font = 'bold 22px DejaVu Sans';
+    ctx.font = 'bold 22px "DejaVu Sans"';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('VS', 350, 35);
 
     // Usernames
     ctx.fillStyle = col1;
-    ctx.font = 'bold 22px DejaVu Sans';
+    ctx.font = 'bold 22px "DejaVu Sans"';
     ctx.fillText(u1.username, 175, 80);
 
     ctx.fillStyle = col2;
@@ -163,7 +178,7 @@ function buildImage(u1, d1, ov1, u2, d2, ov2) {
 
     // Footer
     ctx.fillStyle = '#444444';
-    ctx.font = '12px DejaVu Sans';
+    ctx.font = '12px "DejaVu Sans"';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Olzhasstik Motorsports', 350, 535);
