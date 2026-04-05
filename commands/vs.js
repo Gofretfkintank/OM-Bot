@@ -53,9 +53,9 @@ function statRow(y, label, v1, v2, winner) {
     const c1 = winner === 'left'  ? '#00E676' : winner === 'tie' ? '#FFEB3B' : '#aaaaaa';
     const c2 = winner === 'right' ? '#00E676' : winner === 'tie' ? '#FFEB3B' : '#aaaaaa';
     return `
-  <text x="175" y="${y}" text-anchor="end"   fill="${c1}" font-size="18" font-family="Arial" font-weight="bold">${v1}</text>
-  <text x="350" y="${y}" text-anchor="middle" fill="#888888" font-size="14" font-family="Arial">${label}</text>
-  <text x="525" y="${y}" text-anchor="start"  fill="${c2}" font-size="18" font-family="Arial" font-weight="bold">${v2}</text>`;
+  <text x="175" y="${y}" text-anchor="end"   fill="${c1}" font-size="18" font-family="sans-serif" font-weight="bold">${v1}</text>
+  <text x="350" y="${y}" text-anchor="middle" fill="#888888" font-size="14" font-family="sans-serif">${label}</text>
+  <text x="525" y="${y}" text-anchor="start"  fill="${c2}" font-size="18" font-family="sans-serif" font-weight="bold">${v2}</text>`;
 }
 
 // ── Main SVG Builder ────────────────────────────────────────────────────────
@@ -102,21 +102,21 @@ function buildSVG(u1, d1, ov1, u2, d2, ov2) {
   <rect width="${W}" height="${H}" fill="none" stroke="#E10600" stroke-width="2" stroke-opacity="0.4" rx="18"/>
   <rect x="348" y="20" width="4" height="${H-40}" fill="url(#divider)" rx="2"/>
 
-  <text x="350" y="38" text-anchor="middle" fill="#E10600" font-size="20" font-family="Arial" font-weight="900" letter-spacing="4">VS</text>
+  <text x="350" y="38" text-anchor="middle" fill="#E10600" font-size="20" font-family="sans-serif" font-weight="900" letter-spacing="4">VS</text>
 
   <circle cx="175" cy="95" r="42" fill="#1e1e35" stroke="${col1}" stroke-width="3"/>
-  <text x="175" y="103" text-anchor="middle" fill="${col1}" font-size="36" font-family="Arial" font-weight="bold">${ini1}</text>
-  <text x="175" y="155" text-anchor="middle" fill="#ffffff" font-size="16" font-family="Arial" font-weight="bold">${u1.username}</text>
+  <text x="175" y="103" text-anchor="middle" fill="${col1}" font-size="36" font-family="sans-serif" font-weight="bold">${ini1}</text>
+  <text x="175" y="155" text-anchor="middle" fill="#ffffff" font-size="16" font-family="sans-serif" font-weight="bold">${u1.username}</text>
   ${ringPath(175, 215, r, ov1, col1)}
-  <text x="175" y="208" text-anchor="middle" fill="${col1}" font-size="22" font-family="Arial" font-weight="900">${ov1}</text>
-  <text x="175" y="228" text-anchor="middle" fill="#888888" font-size="11" font-family="Arial">OVERALL</text>
+  <text x="175" y="208" text-anchor="middle" fill="${col1}" font-size="22" font-family="sans-serif" font-weight="900">${ov1}</text>
+  <text x="175" y="228" text-anchor="middle" fill="#888888" font-size="11" font-family="sans-serif">OVERALL</text>
 
   <circle cx="525" cy="95" r="42" fill="#1e1e35" stroke="${col2}" stroke-width="3"/>
-  <text x="525" y="103" text-anchor="middle" fill="${col2}" font-size="36" font-family="Arial" font-weight="bold">${ini2}</text>
-  <text x="525" y="155" text-anchor="middle" fill="#ffffff" font-size="16" font-family="Arial" font-weight="bold">${u2.username}</text>
+  <text x="525" y="103" text-anchor="middle" fill="${col2}" font-size="36" font-family="sans-serif" font-weight="bold">${ini2}</text>
+  <text x="525" y="155" text-anchor="middle" fill="#ffffff" font-size="16" font-family="sans-serif" font-weight="bold">${u2.username}</text>
   ${ringPath(525, 215, r, ov2, col2)}
-  <text x="525" y="208" text-anchor="middle" fill="${col2}" font-size="22" font-family="Arial" font-weight="900">${ov2}</text>
-  <text x="525" y="228" text-anchor="middle" fill="#888888" font-size="11" font-family="Arial">OVERALL</text>
+  <text x="525" y="208" text-anchor="middle" fill="${col2}" font-size="22" font-family="sans-serif" font-weight="900">${ov2}</text>
+  <text x="525" y="228" text-anchor="middle" fill="#888888" font-size="11" font-family="sans-serif">OVERALL</text>
 
   <line x1="40" y1="295" x2="660" y2="295" stroke="#2a2a3a" stroke-width="1"/>
 
@@ -130,7 +130,7 @@ function buildSVG(u1, d1, ov1, u2, d2, ov2) {
 
   <rect x="0" y="${H-44}" width="${W}" height="44" fill="#0d0d1a" rx="18"/>
   <rect x="0" y="${H-44}" width="${W}" height="22" fill="#0d0d1a"/>
-  <text x="${W/2}" y="${H-16}" text-anchor="middle" fill="#E10600" font-size="14" font-family="Arial" font-weight="bold">🏁 ${vsLabel}</text>
+  <text x="${W/2}" y="${H-16}" text-anchor="middle" fill="#E10600" font-size="14" font-family="sans-serif" font-weight="bold">🏁 ${vsLabel}</text>
 </svg>`;
 }
 
