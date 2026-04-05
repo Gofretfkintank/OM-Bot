@@ -1,5 +1,11 @@
 [phases.setup]
-aptPkgs = ["fontconfig", "fonts-liberation"]
+# fonts-dejavu eklemek "sans-serif" için en güvenli limandır
+aptPkgs = ["fontconfig", "fonts-liberation", "fonts-dejavu"]
 
 [phases.build]
-cmds = ["fc-cache -fv"]
+# Font önbelleğini zorla yeniliyoruz
+cmds = ["fc-cache -f -v"]
+
+[variables]
+# Fontconfig'in yolunu bulamadığı o (null) hatasını bu çözer
+FONTCONFIG_PATH = "/etc/fonts"
