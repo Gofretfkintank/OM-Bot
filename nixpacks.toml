@@ -1,0 +1,5 @@
+[phases.setup]
+aptPkgs = ["fontconfig", "fonts-liberation"]
+
+[phases.build]
+cmds = ["fc-cache -fv"]
