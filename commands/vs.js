@@ -6,18 +6,22 @@ const Driver = require('../models/Driver');
 const { createCanvas, registerFont } = require('canvas');
 const path = require('path');
 
-// Register system fonts once (at module load)
+// Register custom fonts BEFORE any canvas is created
 try {
-    // Common system fonts on Linux after installing fonts-dejavu
-    registerFont('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', { 
-        family: 'DejaVu Sans', 
-        weight: 'bold' 
+    const fontsDir = path.join(__dirname, '../fonts');
+    
+    registerFont(path.join(fontsDir, 'Roboto-Bold.ttf'), {
+        family: 'Roboto',
+        weight: 'bold'
     });
-    registerFont('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', { 
-        family: 'DejaVu Sans' 
+    
+    registerFont(path.join(fontsDir, 'Roboto-Regular.ttf'), {
+        family: 'Roboto'
     });
+    
+    console.log('✅ Roboto fonts registered');
 } catch (err) {
-    console.warn('Could not register DejaVuSans font, falling back to sans-serif');
+    console.error('❌ Font registration failed:', err.message);
 }
 
 //--------------------------------
@@ -62,14 +66,12 @@ function drawRing(ctx, cx, cy, r, pct, color) {
     const startAngle = -Math.PI / 2;
     const endAngle   = startAngle + (pct / 100) * 2 * Math.PI;
 
-    // Background ring
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, 2 * Math.PI);
     ctx.strokeStyle = '#2a2a3a';
     ctx.lineWidth = 10;
     ctx.stroke();
 
-    // Progress ring
     ctx.beginPath();
     ctx.arc(cx, cy, r, startAngle, endAngle);
     ctx.strokeStyle = color;
@@ -78,16 +80,14 @@ function drawRing(ctx, cx, cy, r, pct, color) {
     ctx.stroke();
     ctx.lineCap = 'butt';
 
-    // Percentage
     ctx.fillStyle = color;
-    ctx.font = 'bold 28px "DejaVu Sans"';
+    ctx.font = 'bold 28px Roboto';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(pct), cx, cy - 8);
 
-    // Label
     ctx.fillStyle = '#888888';
-    ctx.font = '13px "DejaVu Sans"';
+    ctx.font = '13px Roboto';
     ctx.fillText('OVERALL', cx, cy + 16);
 }
 
@@ -101,17 +101,17 @@ function drawStatRow(ctx, y, label, v1, v2, winner) {
     ctx.textBaseline = 'middle';
 
     ctx.fillStyle = c1;
-    ctx.font = 'bold 18px "DejaVu Sans"';
+    ctx.font = 'bold 18px Roboto';
     ctx.textAlign = 'right';
     ctx.fillText(String(v1), 175, y);
 
     ctx.fillStyle = '#888888';
-    ctx.font = '14px "DejaVu Sans"';
+    ctx.font = '14px Roboto';
     ctx.textAlign = 'center';
     ctx.fillText(label, 350, y);
 
     ctx.fillStyle = c2;
-    ctx.font = 'bold 18px "DejaVu Sans"';
+    ctx.font = 'bold 18px Roboto';
     ctx.textAlign = 'left';
     ctx.fillText(String(v2), 525, y);
 }
@@ -134,7 +134,6 @@ function buildImage(u1, d1, ov1, u2, d2, ov2) {
     ctx.fillStyle = '#12121f';
     ctx.fillRect(0, 0, W, H);
 
-    // Vertical divider
     ctx.strokeStyle = '#2a2a3a';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -142,26 +141,22 @@ function buildImage(u1, d1, ov1, u2, d2, ov2) {
     ctx.lineTo(350, 490);
     ctx.stroke();
 
-    // VS
     ctx.fillStyle = '#E10600';
-    ctx.font = 'bold 22px "DejaVu Sans"';
+    ctx.font = 'bold 22px Roboto';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('VS', 350, 35);
 
-    // Usernames
     ctx.fillStyle = col1;
-    ctx.font = 'bold 22px "DejaVu Sans"';
+    ctx.font = 'bold 22px Roboto';
     ctx.fillText(u1.username, 175, 80);
 
     ctx.fillStyle = col2;
     ctx.fillText(u2.username, 525, 80);
 
-    // Rings
     drawRing(ctx, 175, 195, 60, ov1, col1);
     drawRing(ctx, 525, 195, 60, ov2, col2);
 
-    // Stats
     const r1  = d1.races   || 0, r2  = d2.races   || 0;
     const w1  = d1.wins    || 0, w2  = d2.wins    || 0;
     const p1  = d1.podiums || 0, p2  = d2.podiums || 0;
@@ -176,9 +171,8 @@ function buildImage(u1, d1, ov1, u2, d2, ov2) {
     drawStatRow(ctx, 430, 'DNF',     dn1,  dn2,  cmp(dn2, dn1));
     drawStatRow(ctx, 460, 'WDC',     wdc1, wdc2, cmp(wdc1, wdc2));
 
-    // Footer
     ctx.fillStyle = '#444444';
-    ctx.font = '12px "DejaVu Sans"';
+    ctx.font = '12px Roboto';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Olzhasstik Motorsports', 350, 535);
