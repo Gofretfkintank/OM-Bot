@@ -77,8 +77,8 @@ function buildSVG(u1, d1, ov1, u2, d2, ov2) {
     const ini1 = u1.username.charAt(0).toUpperCase();
     const ini2 = u2.username.charAt(0).toUpperCase();
 
-    const vsLabel = ov1 > ov2 ? `${u1.username} kazanıyor` :
-                    ov2 > ov1 ? `${u2.username} kazanıyor` : 'Eşit!';
+    const vsLabel = ov1 > ov2 ? `${u1.username} wins` :
+                    ov2 > ov1 ? `${u2.username} wins` : 'Tied!';
 
     return `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
@@ -117,69 +117,4 @@ function buildSVG(u1, d1, ov1, u2, d2, ov2) {
   <text x="525" y="208" text-anchor="middle" fill="${col2}" font-size="22" font-family="Liberation Sans, sans-serif" font-weight="900">${ov2}</text>
   <text x="525" y="228" text-anchor="middle" fill="#888888" font-size="11" font-family="Liberation Sans, sans-serif">OVERALL</text>
 
-  <line x1="40" y1="295" x2="660" y2="295" stroke="#2a2a3a" stroke-width="1"/>
-
-  ${statRow(323, 'Yarış',       d1.races||0,   d2.races||0,   winnerRaces[0])}
-  ${statRow(351, 'Galibiyet',   d1.wins||0,    d2.wins||0,    winnerWins[0])}
-  ${statRow(379, 'Podyum',      d1.podiums||0, d2.podiums||0, winnerPod[0])}
-  ${statRow(407, 'Pole',        d1.poles||0,   d2.poles||0,   winnerPoles[0])}
-  ${statRow(435, 'Galibiyet %', rate1+'%',     rate2+'%',     winnerRate[0])}
-  ${statRow(463, 'DNF',         d1.dnf||0,     d2.dnf||0,     winnerDNF[0])}
-  ${statRow(491, 'Şampiyonluk', (d1.wdc||0)+(d1.wcc||0), (d2.wdc||0)+(d2.wcc||0), winnerChamp[0])}
-
-  <rect x="0" y="${H-44}" width="${W}" height="44" fill="#0d0d1a" rx="18"/>
-  <rect x="0" y="${H-44}" width="${W}" height="22" fill="#0d0d1a"/>
-  <text x="${W/2}" y="${H-16}" text-anchor="middle" fill="#E10600" font-size="14" font-family="Liberation Sans, sans-serif" font-weight="bold">🏁 ${vsLabel}</text>
-</svg>`;
-}
-
-module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('vs')
-        .setDescription('İki pilotun istatistiklerini karşılaştır')
-        .addUserOption(opt =>
-            opt.setName('pilot1').setDescription('Birinci pilot').setRequired(true))
-        .addUserOption(opt =>
-            opt.setName('pilot2').setDescription('İkinci pilot').setRequired(true)),
-
-    async execute(interaction) {
-        await interaction.deferReply();
-
-        const u1 = interaction.options.getUser('pilot1');
-        const u2 = interaction.options.getUser('pilot2');
-
-        if (u1.id === u2.id) {
-            return interaction.editReply({ content: '❌ Aynı pilotu iki kez seçemezsin.' });
-        }
-
-        let d1, d2;
-        try {
-            [d1, d2] = await Promise.all([
-                Driver.findOne({ userId: u1.id }),
-                Driver.findOne({ userId: u2.id }),
-            ]);
-        } catch (err) {
-            console.error(err);
-            return interaction.editReply({ content: '❌ Veritabanı hatası.' });
-        }
-
-        if (!d1) return interaction.editReply({ content: `❌ **${u1.username}** kayıtlı değil.` });
-        if (!d2) return interaction.editReply({ content: `❌ **${u2.username}** kayıtlı değil.` });
-
-        const ov1 = calcOverall(d1);
-        const ov2 = calcOverall(d2);
-
-        const svg = buildSVG(u1, d1, ov1, u2, d2, ov2);
-
-        let pngBuffer;
-        try {
-            pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
-        } catch (err) {
-            console.error('Sharp hata:', err);
-            return interaction.editReply({ content: '❌ Görsel oluşturulamadı.' });
-        }
-
-        const attachment = new AttachmentBuilder(pngBuffer, { name: 'vs.png' });
-        await interaction.editReply({ files: [attachment] });
-    }
-};
+  <line x1="40" y1="295" x2="660
