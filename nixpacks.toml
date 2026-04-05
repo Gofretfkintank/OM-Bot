@@ -1,2 +1,14 @@
 [phases.setup]
-aptPkgs = ["build-essential", "libcairo2-dev", "libpango1.0-dev", "libjpeg-dev", "libgif-dev", "librsvg2-dev", "pkg-config"]
+aptPkgs = [
+    "build-essential",
+    "libcairo2-dev",
+    "libpango1.0-dev",
+    "libjpeg-dev",
+    "libgif-dev",
+    "librsvg2-dev",
+    "pkg-config",
+    "fontconfig",           # ← Fontconfig'i aktif eder
+    "fonts-dejavu",         # ← En çok işe yarayan Sans fontu
+    "fonts-liberation",     # ← Ekstra güvenli fallback
+    "fonts-noto"            # ← Daha modern ve geniş destek (önerilir)
+]
