@@ -6,7 +6,7 @@ const Driver = require('../models/Driver');
 const { createCanvas } = require('canvas');
 
 //--------------------------------
-// OVERALL CALC
+// OVERALL CALCULATION
 //--------------------------------
 function calcOverall(d) {
     const races = d.races || 0;
@@ -31,7 +31,7 @@ function calcOverall(d) {
 }
 
 //--------------------------------
-// COLOR
+// OVERALL COLOR
 //--------------------------------
 function overallColor(pct) {
     if (pct >= 75) return '#00E676';
@@ -47,12 +47,14 @@ function drawRing(ctx, cx, cy, r, pct, color) {
     const startAngle = -Math.PI / 2;
     const endAngle   = startAngle + (pct / 100) * 2 * Math.PI;
 
+    // Background ring
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, 2 * Math.PI);
     ctx.strokeStyle = '#2a2a3a';
     ctx.lineWidth = 10;
     ctx.stroke();
 
+    // Progress ring
     ctx.beginPath();
     ctx.arc(cx, cy, r, startAngle, endAngle);
     ctx.strokeStyle = color;
@@ -61,13 +63,14 @@ function drawRing(ctx, cx, cy, r, pct, color) {
     ctx.stroke();
     ctx.lineCap = 'butt';
 
-    // Font düzeltmesi
+    // Percentage text
     ctx.fillStyle = color;
     ctx.font = 'bold 28px DejaVu Sans';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(pct), cx, cy - 8);
 
+    // Overall label
     ctx.fillStyle = '#888888';
     ctx.font = '13px DejaVu Sans';
     ctx.fillText('OVERALL', cx, cy + 16);
@@ -109,11 +112,14 @@ function buildImage(u1, d1, ov1, u2, d2, ov2) {
     const col1 = overallColor(ov1);
     const col2 = overallColor(ov2);
 
-    function cmp(a, b) { return a > b ? 'left' : b > a ? 'right' : 'tie'; }
+    function cmp(a, b) { 
+        return a > b ? 'left' : b > a ? 'right' : 'tie'; 
+    }
 
     ctx.fillStyle = '#12121f';
     ctx.fillRect(0, 0, W, H);
 
+    // Vertical divider
     ctx.strokeStyle = '#2a2a3a';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -121,25 +127,26 @@ function buildImage(u1, d1, ov1, u2, d2, ov2) {
     ctx.lineTo(350, 490);
     ctx.stroke();
 
-    // VS yazısı
+    // VS title
     ctx.fillStyle = '#E10600';
     ctx.font = 'bold 22px DejaVu Sans';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('VS', 350, 35);
 
-    // Kullanıcı isimleri
+    // Usernames
     ctx.fillStyle = col1;
     ctx.font = 'bold 22px DejaVu Sans';
-    ctx.textAlign = 'center';
     ctx.fillText(u1.username, 175, 80);
 
     ctx.fillStyle = col2;
     ctx.fillText(u2.username, 525, 80);
 
+    // Rings
     drawRing(ctx, 175, 195, 60, ov1, col1);
     drawRing(ctx, 525, 195, 60, ov2, col2);
 
+    // Stats
     const r1  = d1.races   || 0, r2  = d2.races   || 0;
     const w1  = d1.wins    || 0, w2  = d2.wins    || 0;
     const p1  = d1.podiums || 0, p2  = d2.podiums || 0;
@@ -147,12 +154,12 @@ function buildImage(u1, d1, ov1, u2, d2, ov2) {
     const dn1 = d1.dnf     || 0, dn2 = d2.dnf     || 0;
     const wdc1= d1.wdc     || 0, wdc2= d2.wdc     || 0;
 
-    drawStatRow(ctx, 310, 'Races',   r1,   r2,   cmp(r1,r2));
-    drawStatRow(ctx, 340, 'Wins',    w1,   w2,   cmp(w1,w2));
-    drawStatRow(ctx, 370, 'Podiums', p1,   p2,   cmp(p1,p2));
-    drawStatRow(ctx, 400, 'Poles',   po1,  po2,  cmp(po1,po2));
-    drawStatRow(ctx, 430, 'DNF',     dn1,  dn2,  cmp(dn2,dn1));
-    drawStatRow(ctx, 460, 'WDC',     wdc1, wdc2, cmp(wdc1,wdc2));
+    drawStatRow(ctx, 310, 'Races',   r1,   r2,   cmp(r1, r2));
+    drawStatRow(ctx, 340, 'Wins',    w1,   w2,   cmp(w1, w2));
+    drawStatRow(ctx, 370, 'Podiums', p1,   p2,   cmp(p1, p2));
+    drawStatRow(ctx, 400, 'Poles',   po1,  po2,  cmp(po1, po2));
+    drawStatRow(ctx, 430, 'DNF',     dn1,  dn2,  cmp(dn2, dn1));
+    drawStatRow(ctx, 460, 'WDC',     wdc1, wdc2, cmp(wdc1, wdc2));
 
     // Footer
     ctx.fillStyle = '#444444';
@@ -185,13 +192,13 @@ module.exports = {
         const u2 = interaction.options.getUser('pilot2');
 
         if (u1.id === u2.id)
-            return interaction.editReply('❌ Aynı kullanıcıyı karşılaştıramazsın');
+            return interaction.editReply('❌ Cannot compare the same user');
 
         const d1 = await Driver.findOne({ userId: u1.id });
         const d2 = await Driver.findOne({ userId: u2.id });
 
         if (!d1 || !d2)
-            return interaction.editReply('❌ Sürücülerden biri veritabanında bulunamadı');
+            return interaction.editReply('❌ One or both drivers not found in database');
 
         const ov1 = calcOverall(d1);
         const ov2 = calcOverall(d2);
