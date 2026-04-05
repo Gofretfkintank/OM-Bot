@@ -1,34 +1,14 @@
-//--------------------------
+//--------------------------------
 // IMPORTS
-//--------------------------
+//--------------------------------
 const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
+const { createCanvas } = require('canvas');
 const Driver = require('../models/Driver');
-const { createCanvas, registerFont } = require('canvas');
-const path = require('path');
+const axios = require('axios');
 
-//--------------------------
-// REGISTER FONTS
-//--------------------------
-try {
-    const fontsDir = path.join(__dirname, '../fonts');
-
-    registerFont(path.join(fontsDir, 'Roboto-Bold.ttf'), {
-        family: 'Roboto',
-        weight: 'bold',
-    });
-    registerFont(path.join(fontsDir, 'Roboto-Regular.ttf'), {
-        family: 'Roboto',
-        weight: 'normal',
-    });
-
-    console.log('✅ Roboto fonts registered');
-} catch (err) {
-    console.error('❌ Font registration failed:', err.message);
-}
-
-//--------------------------
+//--------------------------------
 // HELPER FUNCTIONS
-//--------------------------
+//--------------------------------
 function calcOverall(d) {
     const races = d.races || 0;
     if (races === 0) return 0;
@@ -58,72 +38,19 @@ function overallColor(pct) {
     return '#F44336';
 }
 
-function drawRing(ctx, cx, cy, r, pct, color) {
-    const startAngle = -Math.PI / 2;
-    const endAngle   = startAngle + (pct / 100) * 2 * Math.PI;
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-    ctx.strokeStyle = '#2a2a3a';
-    ctx.lineWidth = 10;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, startAngle, endAngle);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 10;
-    ctx.lineCap = 'round';
-    ctx.stroke();
-    ctx.lineCap = 'butt';
-
-    ctx.fillStyle = color;
-    ctx.font = 'bold 28px Roboto';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(String(pct), cx, cy - 8);
-
-    ctx.fillStyle = '#888888';
-    ctx.font = '13px Roboto';
-    ctx.fillText('OVERALL', cx, cy + 16);
-}
-
-function drawStatRow(ctx, y, label, v1, v2, winner) {
-    const c1 = winner === 'left'  ? '#00E676' : winner === 'tie' ? '#FFEB3B' : '#aaaaaa';
-    const c2 = winner === 'right' ? '#00E676' : winner === 'tie' ? '#FFEB3B' : '#aaaaaa';
-
-    ctx.textBaseline = 'middle';
-
-    ctx.fillStyle = c1;
-    ctx.font = 'bold 18px Roboto';
-    ctx.textAlign = 'right';
-    ctx.fillText(String(v1), 175, y);
-
-    ctx.fillStyle = '#888888';
-    ctx.font = '14px Roboto';
-    ctx.textAlign = 'center';
-    ctx.fillText(label, 350, y);
-
-    ctx.fillStyle = c2;
-    ctx.font = 'bold 18px Roboto';
-    ctx.textAlign = 'left';
-    ctx.fillText(String(v2), 525, y);
-}
-
-function buildImage(u1, d1, ov1, u2, d2, ov2) {
+//--------------------------------
+// BUILD BASE IMAGE (FONT OLMADAN)
+//--------------------------------
+function buildImageWithoutFont(d1, ov1, d2, ov2) {
     const W = 700, H = 560;
     const canvas = createCanvas(W, H);
     const ctx = canvas.getContext('2d');
 
-    const col1 = overallColor(ov1);
-    const col2 = overallColor(ov2);
-
-    function cmp(a, b) { 
-        return a > b ? 'left' : b > a ? 'right' : 'tie'; 
-    }
-
+    // Background
     ctx.fillStyle = '#12121f';
     ctx.fillRect(0, 0, W, H);
 
+    // Middle line
     ctx.strokeStyle = '#2a2a3a';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -131,65 +58,109 @@ function buildImage(u1, d1, ov1, u2, d2, ov2) {
     ctx.lineTo(350, 490);
     ctx.stroke();
 
-    ctx.fillStyle = '#E10600';
-    ctx.font = 'bold 22px Roboto';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('VS', 350, 35);
+    // Rings (without numbers)
+    function drawRing(ctx, cx, cy, r, pct, color) {
+        const startAngle = -Math.PI / 2;
+        const endAngle   = startAngle + (pct / 100) * 2 * Math.PI;
 
-    ctx.fillStyle = col1;
-    ctx.fillText(u1.username, 175, 80);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+        ctx.strokeStyle = '#2a2a3a';
+        ctx.lineWidth = 10;
+        ctx.stroke();
 
-    ctx.fillStyle = col2;
-    ctx.fillText(u2.username, 525, 80);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, startAngle, endAngle);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 10;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.lineCap = 'butt';
+    }
 
-    drawRing(ctx, 175, 195, 60, ov1, col1);
-    drawRing(ctx, 525, 195, 60, ov2, col2);
-
-    drawStatRow(ctx, 310, 'Races', d1.races||0, d2.races||0, cmp(d1.races||0, d2.races||0));
-    drawStatRow(ctx, 340, 'Wins', d1.wins||0, d2.wins||0, cmp(d1.wins||0, d2.wins||0));
-    drawStatRow(ctx, 370, 'Podiums', d1.podiums||0, d2.podiums||0, cmp(d1.podiums||0, d2.podiums||0));
-    drawStatRow(ctx, 400, 'Poles', d1.poles||0, d2.poles||0, cmp(d1.poles||0, d2.poles||0));
-    drawStatRow(ctx, 430, 'DNF', d1.dnf||0, d2.dnf||0, cmp(d2.dnf||0, d1.dnf||0));
-    drawStatRow(ctx, 460, 'WDC', d1.wdc||0, d2.wdc||0, cmp(d1.wdc||0, d2.wdc||0));
-
-    ctx.fillStyle = '#444444';
-    ctx.font = '12px Roboto';
-    ctx.fillText('Olzhasstik Motorsports', 350, 535);
+    drawRing(ctx, 175, 195, 60, ov1, overallColor(ov1));
+    drawRing(ctx, 525, 195, 60, ov2, overallColor(ov2));
 
     return canvas.toBuffer('image/png');
 }
 
-//--------------------------
-// COMMAND EXPORT
-//--------------------------
+//--------------------------------
+// COOKIE API FONT OVERLAY
+//--------------------------------
+async function addFontWithCookieAPI(baseImage, textOverlays) {
+    // Cookie API endpoint (gerçek dokümanına göre değiştir)
+    const response = await axios.post(
+        'https://api.cookie-api.com/api/ai/generate-image',
+        {
+            image: baseImage.toString('base64'),
+            text: textOverlays,
+            font: 'Roboto',
+            fontSize: 28,
+            color: '#ffffff'
+        },
+        {
+            headers: {
+                Authorization: `Bearer ${process.env.COOKIE_API_KEY}`,
+                'Content-Type': 'application/json'
+            }
+        }
+    );
+
+    // API base64 döner
+    return Buffer.from(response.data.image, 'base64');
+}
+
+//--------------------------------
+// SLASH COMMAND
+//--------------------------------
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('vs')
         .setDescription('Compare two drivers')
         .addUserOption(option =>
-            option.setName('pilot1').setDescription('First driver').setRequired(true)
+            option.setName('pilot1')
+                  .setDescription('First driver')
+                  .setRequired(true)
         )
         .addUserOption(option =>
-            option.setName('pilot2').setDescription('Second driver').setRequired(true)
+            option.setName('pilot2')
+                  .setDescription('Second driver')
+                  .setRequired(true)
         ),
+
     async execute(interaction) {
         await interaction.deferReply();
 
         const u1 = interaction.options.getUser('pilot1');
         const u2 = interaction.options.getUser('pilot2');
 
-        if (u1.id === u2.id) return interaction.editReply('❌ Cannot compare the same user');
+        if (u1.id === u2.id)
+            return interaction.editReply('❌ Cannot compare the same user');
 
         const d1 = await Driver.findOne({ userId: u1.id });
         const d2 = await Driver.findOne({ userId: u2.id });
-        if (!d1 || !d2) return interaction.editReply('❌ One or both drivers not found');
+
+        if (!d1 || !d2)
+            return interaction.editReply('❌ One or both drivers not found');
 
         const ov1 = calcOverall(d1);
         const ov2 = calcOverall(d2);
 
-        const png = buildImage(u1, d1, ov1, u2, d2, ov2);
+        // 1️⃣ Canvas ile temel görsel (fontsuz)
+        const baseCanvas = buildImageWithoutFont(d1, ov1, d2, ov2);
 
-        return interaction.editReply({ files: [new AttachmentBuilder(png, { name: 'vs.png' })] });
+        // 2️⃣ Fontlu yazılar için Cookie API
+        const finalImage = await addFontWithCookieAPI(baseCanvas, [
+            { x: 175, y: 80, content: u1.username },
+            { x: 525, y: 80, content: u2.username },
+            { x: 350, y: 35, content: 'VS' },
+            { x: 175, y: 195, content: ov1.toString() },
+            { x: 525, y: 195, content: ov2.toString() }
+        ]);
+
+        // 3️⃣ Discord’a gönder
+        return interaction.editReply({
+            files: [new AttachmentBuilder(finalImage, { name: 'vs.png' })]
+        });
     }
 };
