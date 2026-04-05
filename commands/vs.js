@@ -46,13 +46,16 @@ function overallColor(pct) {
 function ringPath(cx, cy, r, pct, color) {
     const circumference = 2 * Math.PI * r;
     const dash = (pct / 100) * circumference;
+    const f = 'font-family="DejaVu Sans,sans-serif"';
 
     return `
 <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#2a2a3a" stroke-width="10"/>
 <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="10"
 stroke-dasharray="${dash.toFixed(2)} ${circumference.toFixed(2)}"
 stroke-linecap="round"
-transform="rotate(-90 ${cx} ${cy})"/>`;
+transform="rotate(-90 ${cx} ${cy})"/>
+<text x="${cx}" y="${cy - 8}" text-anchor="middle" fill="${color}" font-size="26" font-weight="bold" ${f}>${pct}</text>
+<text x="${cx}" y="${cy + 16}" text-anchor="middle" fill="#888" font-size="13" ${f}>OVERALL</text>`;
 }
 
 //--------------------------------
@@ -77,25 +80,36 @@ function buildSVG(u1, d1, ov1, u2, d2, ov2) {
     const col1 = overallColor(ov1);
     const col2 = overallColor(ov2);
 
+    function cmp(a, b) { return a > b ? 'left' : b > a ? 'right' : 'tie'; }
+
+    const r1 = d1.races   || 0, r2 = d2.races   || 0;
+    const w1 = d1.wins    || 0, w2 = d2.wins    || 0;
+    const p1 = d1.podiums || 0, p2 = d2.podiums || 0;
+    const po1= d1.poles   || 0, po2= d2.poles   || 0;
+    const dn1= d1.dnf     || 0, dn2= d2.dnf     || 0;
+    const wdc1= d1.wdc    || 0, wdc2= d2.wdc    || 0;
+
     return `<?xml version="1.0"?>
-<svg width="700" height="520" xmlns="http://www.w3.org/2000/svg">
+<svg width="700" height="560" xmlns="http://www.w3.org/2000/svg">
 
-<rect width="700" height="520" fill="#12121f"/>
+<rect width="700" height="560" fill="#12121f"/>
 
-<text x="350" y="40" text-anchor="middle" fill="#E10600" font-size="20" ${f}>VS</text>
+<text x="350" y="40" text-anchor="middle" fill="#E10600" font-size="22" font-weight="bold" ${f}>VS</text>
 
-<text x="175" y="100" text-anchor="middle" fill="${col1}" font-size="30" ${f}>${u1.username}</text>
-<text x="525" y="100" text-anchor="middle" fill="${col2}" font-size="30" ${f}>${u2.username}</text>
+<text x="175" y="90" text-anchor="middle" fill="${col1}" font-size="26" font-weight="bold" ${f}>${u1.username}</text>
+<text x="525" y="90" text-anchor="middle" fill="${col2}" font-size="26" font-weight="bold" ${f}>${u2.username}</text>
 
-${ringPath(175, 200, 60, ov1, col1)}
-${ringPath(525, 200, 60, ov2, col2)}
+${ringPath(175, 195, 60, ov1, col1)}
+${ringPath(525, 195, 60, ov2, col2)}
 
-${statRow(300,'Races',d1.races||0,d2.races||0,'tie')}
-${statRow(330,'Wins',d1.wins||0,d2.wins||0,'tie')}
+${statRow(315, 'Races',   r1,   r2,   cmp(r1,r2))}
+${statRow(345, 'Wins',    w1,   w2,   cmp(w1,w2))}
+${statRow(375, 'Podiums', p1,   p2,   cmp(p1,p2))}
+${statRow(405, 'Poles',   po1,  po2,  cmp(po1,po2))}
+${statRow(435, 'DNF',     dn1,  dn2,  cmp(dn2,dn1))}
+${statRow(465, 'WDC',     wdc1, wdc2, cmp(wdc1,wdc2))}
 
-<text x="350" y="500" text-anchor="middle" fill="#E10600" font-size="14" ${f}>
-&#x1F3C1;
-</text>
+<text x="350" y="540" text-anchor="middle" fill="#555" font-size="12" ${f}>Olzhasstik Motorsports</text>
 
 </svg>`;
 }
