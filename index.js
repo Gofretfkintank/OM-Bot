@@ -28,6 +28,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 const Driver = require('./models/Driver');
 const DotyVote = require('./models/DotyVote');
+const Maintenance = require('./models/Maintenance');
 
 //--------------------------
 // CLIENT
@@ -86,6 +87,18 @@ if (fs.existsSync(eventsPath)) {
 }
 
 //--------------------------
+// COMMAND HASH HELPER
+//--------------------------
+
+function hashCommand(cmd) {
+    try {
+        return JSON.stringify(cmd.data.toJSON());
+    } catch {
+        return String(cmd.data.name);
+    }
+}
+
+//--------------------------
 // READY
 //--------------------------
 
@@ -101,6 +114,47 @@ client.once('clientReady', async () => {
         for (const guildId of allowedGuilds) {
             await client.application.commands.set(data, guildId);
             console.log(`✅ Commands loaded: ${guildId}`);
+        }
+
+        //--------------------------
+        // MAINTENANCE SNAPSHOT CHECK
+        // Eğer bakım modundaysa, redeploy sonrası
+        // değişen/eklenen komutları otomatik tespit et
+        //--------------------------
+
+        try {
+            const state = await Maintenance.findById('singleton');
+
+            if (state && state.active && state.snapshot && state.snapshot.size > 0) {
+
+                const newLocked = [];
+
+                for (const [name, cmd] of client.commands) {
+                    const oldHash = state.snapshot.get(name);
+                    const newHash = hashCommand(cmd);
+
+                    // Yeni eklenen komut
+                    if (!oldHash) {
+                        newLocked.push(name);
+                        console.log(`🔧 [MAINTENANCE] Yeni komut tespit edildi: /${name}`);
+                    }
+                    // Değiştirilmiş komut
+                    else if (oldHash !== newHash) {
+                        newLocked.push(name);
+                        console.log(`🔧 [MAINTENANCE] Değişen komut tespit edildi: /${name}`);
+                    }
+                }
+
+                if (newLocked.length > 0) {
+                    state.lockedCommands = newLocked;
+                    await state.save();
+                    console.log(`🔧 [MAINTENANCE] Kilitli komutlar: ${newLocked.join(', ')}`);
+                } else {
+                    console.log(`🔧 [MAINTENANCE] Bakım modu aktif ama değişen komut yok.`);
+                }
+            }
+        } catch (err) {
+            console.error('[MAINTENANCE] Snapshot check hatası:', err);
         }
 
     } catch (err) {
@@ -235,6 +289,36 @@ client.on('interactionCreate', async interaction => {
             const isCommander = interaction.user.id === COMMANDER_ID;
             const isCoOwner = member.roles.cache.has(CO_OWNER_ROLE_ID);
             const hasFullPower = isCommander || isCoOwner;
+            const isStaff = member.permissions.has(PermissionsBitField.Flags.ManageMessages);
+
+            //--------------------------
+            // MAINTENANCE CHECK
+            //--------------------------
+
+            if (interaction.commandName !== 'maintenance') {
+                try {
+                    const state = await Maintenance.findById('singleton');
+
+                    if (state && state.active && state.lockedCommands.includes(interaction.commandName)) {
+
+                        if (!isCommander && !isCoOwner && !isStaff) {
+                            return interaction.reply({
+                                content: [
+                                    `🔧 **\`/${interaction.commandName}\` şu an bakımda!**`,
+                                    ``,
+                                    `Gofret (the coder) wafer pişiriyor şu an 🧇`,
+                                    `*it will be back soon — stay tuned!*`,
+                                    ``,
+                                    `Üzülme, hâlâ bir sürü komut var 👀`
+                                ].join('\n'),
+                                ephemeral: true
+                            });
+                        }
+                    }
+                } catch (err) {
+                    console.error('[MAINTENANCE] Check hatası:', err);
+                }
+            }
 
             const modCommands = new Set(['mute', 'timeout', 'ban', 'kick']);
 
