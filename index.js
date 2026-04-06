@@ -19,8 +19,8 @@ const path = require('path');
 //--------------------------
 
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log("🟢 MongoDB bağlandı"))
-    .catch(err => console.error("Mongo hata:", err));
+    .then(() => console.log("🟢 MongoDB connected successfully"))
+    .catch(err => console.error("MongoDB connection error:", err));
 
 //--------------------------
 // MODELS
@@ -82,7 +82,7 @@ if (fs.existsSync(eventsPath)) {
     for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
         const event = require(`./events/${file}`);
         event(client);
-        console.log(`📂 Event yüklendi: ${file}`);
+        console.log(`📂 Event loaded: ${file}`);
     }
 }
 
@@ -102,7 +102,7 @@ function hashCommand(cmd) {
 // READY
 //--------------------------
 
-client.once('clientReady', async () => {
+client.once('ready', async () => {
 
     console.log(`[ONLINE] ${client.user.tag}`);
 
@@ -113,48 +113,48 @@ client.once('clientReady', async () => {
 
         for (const guildId of allowedGuilds) {
             await client.application.commands.set(data, guildId);
-            console.log(`✅ Commands loaded: ${guildId}`);
+            console.log(`✅ Commands deployed to: ${guildId}`);
         }
 
         //--------------------------
         // MAINTENANCE SNAPSHOT CHECK
-        // Eğer bakım modundaysa, redeploy sonrası
-        // değişen/eklenen komutları otomatik tespit et
+        // If maintenance is active, detect changed/new 
+        // commands automatically after redeploy
         //--------------------------
 
         try {
             const state = await Maintenance.findById('singleton');
 
-            if (state && state.active && state.snapshot && state.snapshot.size > 0) {
+            if (state && state.active && state.snapshot) {
 
                 const newLocked = [];
 
                 for (const [name, cmd] of client.commands) {
-                    const oldHash = state.snapshot.get(name);
+                    const oldHash = state.snapshot instanceof Map ? state.snapshot.get(name) : state.snapshot[name];
                     const newHash = hashCommand(cmd);
 
-                    // Yeni eklenen komut
+                    // Newly added command
                     if (!oldHash) {
                         newLocked.push(name);
-                        console.log(`🔧 [MAINTENANCE] Yeni komut tespit edildi: /${name}`);
+                        console.log(`🔧 [MAINTENANCE] New command detected: /${name}`);
                     }
-                    // Değiştirilmiş komut
+                    // Modified command
                     else if (oldHash !== newHash) {
                         newLocked.push(name);
-                        console.log(`🔧 [MAINTENANCE] Değişen komut tespit edildi: /${name}`);
+                        console.log(`🔧 [MAINTENANCE] Modified command detected: /${name}`);
                     }
                 }
 
                 if (newLocked.length > 0) {
                     state.lockedCommands = newLocked;
                     await state.save();
-                    console.log(`🔧 [MAINTENANCE] Kilitli komutlar: ${newLocked.join(', ')}`);
+                    console.log(`🔧 [MAINTENANCE] Locked commands: ${newLocked.join(', ')}`);
                 } else {
-                    console.log(`🔧 [MAINTENANCE] Bakım modu aktif ama değişen komut yok.`);
+                    console.log(`🔧 [MAINTENANCE] Mode is active but no command changes detected.`);
                 }
             }
         } catch (err) {
-            console.error('[MAINTENANCE] Snapshot check hatası:', err);
+            console.error('[MAINTENANCE] Snapshot check error:', err);
         }
 
     } catch (err) {
@@ -202,25 +202,20 @@ client.once('clientReady', async () => {
                     }
 
                     //--------------------------
-                    // RESULT
+                    // RESULT MESSAGES
                     //--------------------------
 
                     if (winners.length === 0) {
-
-                        if (message) {
-                            await message.reply('❌ No votes.');
-                        }
+                        if (message) await message.reply('❌ No votes recorded.');
 
                     } else if (winners.length > 1) {
-
                         if (message) {
                             await message.reply(
-                                `🤝 Tie:\n${winners.map(id => `<@${id}>`).join('\n')} (${max} votes)`
+                                `🤝 **It's a Tie!**\n${winners.map(id => `<@${id}>`).join('\n')} (${max} votes each)`
                             );
                         }
 
                     } else {
-
                         const winner = winners[0];
 
                         await Driver.findOneAndUpdate(
@@ -231,7 +226,7 @@ client.once('clientReady', async () => {
 
                         if (message) {
                             await message.reply(
-                                `🏆 Winner: <@${winner}> with ${max} votes!`
+                                `🏆 **Driver of the Day:** <@${winner}> with **${max}** votes!`
                             );
                         }
                     }
@@ -252,7 +247,7 @@ client.once('clientReady', async () => {
                     await vote.save();
 
                 } catch (err) {
-                    console.error('END ERROR:', err);
+                    console.error('VOTE END ERROR:', err);
                 }
             }
 
@@ -264,7 +259,7 @@ client.once('clientReady', async () => {
 });
 
 //--------------------------
-// INTERACTION
+// INTERACTION HANDLER
 //--------------------------
 
 client.on('interactionCreate', async interaction => {
@@ -276,7 +271,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isChatInputCommand()) {
 
         if (!allowedGuilds.includes(interaction.guildId)) {
-            return interaction.reply({ content: '❌ Not allowed.', ephemeral: true });
+            return interaction.reply({ content: '❌ Access denied for this server.', ephemeral: true });
         }
 
         const command = client.commands.get(interaction.commandName);
@@ -301,25 +296,26 @@ client.on('interactionCreate', async interaction => {
 
                     if (state && state.active && state.lockedCommands.includes(interaction.commandName)) {
 
-                        if (!isCommander && !isCoOwner && !isStaff) {
+                        if (!hasFullPower && !isStaff) {
                             return interaction.reply({
                                 content: [
-                                    `🔧 **\`/${interaction.commandName}\` şu an bakımda!**`,
+                                    `🔧 **/ ${interaction.commandName} is currently under maintenance!**`,
                                     ``,
-                                    `Gofret (the coder) wafer pişiriyor şu an 🧇`,
-                                    `*it will be back soon — stay tuned!*`,
+                                    `**Gofret (the coder)** is cooking some wafers right now 🧇`,
+                                    `*It will be back soon — stay tuned!*`,
                                     ``,
-                                    `Üzülme, hâlâ bir sürü komut var 👀`
+                                    `Don't worry, there are still plenty of other commands available 👀`
                                 ].join('\n'),
                                 ephemeral: true
                             });
                         }
                     }
                 } catch (err) {
-                    console.error('[MAINTENANCE] Check hatası:', err);
+                    console.error('[MAINTENANCE] Check error:', err);
                 }
             }
 
+            // Moderation Command Protection
             const modCommands = new Set(['mute', 'timeout', 'ban', 'kick']);
 
             if (modCommands.has(interaction.commandName)) {
@@ -327,10 +323,9 @@ client.on('interactionCreate', async interaction => {
                 const target = interaction.options.getMember('target') || interaction.options.getMember('user');
 
                 if (target) {
-
                     if (target.roles.highest.position >= interaction.guild.members.me.roles.highest.position) {
                         return interaction.reply({
-                            content: '❌ I cannot act on this user.',
+                            content: '❌ I cannot perform actions on this user due to role hierarchy.',
                             ephemeral: true
                         });
                     }
@@ -339,7 +334,7 @@ client.on('interactionCreate', async interaction => {
 
                     if (targetIsStaff && !hasFullPower) {
                         return interaction.reply({
-                            content: '❌ Only VIPs can act on staff!',
+                            content: '❌ Only VIPs (Commander/Co-Owner) can perform actions on staff members!',
                             ephemeral: true
                         });
                     }
@@ -349,12 +344,12 @@ client.on('interactionCreate', async interaction => {
             await command.execute(interaction);
 
         } catch (err) {
-            console.error(`[ERROR] ${interaction.commandName}`, err);
+            console.error(`[EXECUTION ERROR] ${interaction.commandName}:`, err);
 
             if (interaction.replied || interaction.deferred) {
-                await interaction.followUp({ content: '❌ Error!', ephemeral: true }).catch(() => {});
+                await interaction.followUp({ content: '❌ An unexpected error occurred while executing the command.', ephemeral: true }).catch(() => {});
             } else {
-                await interaction.reply({ content: '❌ Error!', ephemeral: true }).catch(() => {});
+                await interaction.reply({ content: '❌ An unexpected error occurred while executing the command.', ephemeral: true }).catch(() => {});
             }
         }
     }
@@ -375,59 +370,37 @@ client.on('interactionCreate', async interaction => {
             });
 
             if (!vote) {
-                return interaction.reply({ content: 'Vote not found.', ephemeral: true });
+                return interaction.reply({ content: '❌ Active voting session not found.', ephemeral: true });
             }
 
             if (Date.now() > vote.endTime) {
-                return interaction.reply({ content: 'Voting ended.', ephemeral: true });
+                return interaction.reply({ content: '❌ Voting session has ended.', ephemeral: true });
             }
 
-            //--------------------------
-            // PARTICIPANT CHECK (🔥 FIX)
-            //--------------------------
-
+            // Participant Validation
             if (!vote.participants.includes(votedUserId)) {
-                return interaction.reply({
-                    content: 'Invalid vote.',
-                    ephemeral: true
-                });
+                return interaction.reply({ content: '❌ Invalid candidate selection.', ephemeral: true });
             }
 
-            //--------------------------
-            // SPAM CHECK
-            //--------------------------
-
+            // Duplicate Vote Prevention
             if (vote.voters.includes(interaction.user.id)) {
-                return interaction.reply({
-                    content: 'Already voted.',
-                    ephemeral: true
-                });
+                return interaction.reply({ content: '❌ You have already cast your vote.', ephemeral: true });
             }
 
-            //--------------------------
-            // SAFE MAP UPDATE (🔥 FIX)
-            //--------------------------
-
+            // Safe Map Update
             if (!vote.votes.has(votedUserId)) {
                 vote.votes.set(votedUserId, 0);
             }
 
-            vote.votes.set(
-                votedUserId,
-                vote.votes.get(votedUserId) + 1
-            );
-
+            vote.votes.set(votedUserId, vote.votes.get(votedUserId) + 1);
             vote.voters.push(interaction.user.id);
 
             await vote.save();
 
-            await interaction.reply({
-                content: 'Vote counted.',
-                ephemeral: true
-            });
+            await interaction.reply({ content: '✅ Your vote has been successfully recorded!', ephemeral: true });
 
         } catch (err) {
-            console.error('VOTE ERROR:', err);
+            console.error('VOTING BUTTON ERROR:', err);
         }
     }
 });
