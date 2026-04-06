@@ -15,7 +15,6 @@ module.exports = (client) => {
     const TEST_SERVER = "1475516491431678034";
     const CONTROL_CHANNEL = "1488543017794142309";
 
-    // Dashboard Mesajını Oluşturma Fonksiyonu
     async function createDashboardEmbed() {
         const state = await Maintenance.findById('singleton');
         const isMaintenance = state?.active || false;
@@ -23,44 +22,32 @@ module.exports = (client) => {
         const embed = new EmbedBuilder()
             .setColor(isMaintenance ? 0xffa500 : 0x00ff00)
             .setTitle('🏎️ Gofret Pit Wall | Admin Dashboard')
-            .setDescription(
-                `Welcome to the central control unit. From here, you can manage the bot's status and perform emergency actions across the main server.`
-            )
+            .setDescription(`Central control unit for **Olzhasstik Motorsports**.`)
             .addFields(
-                { name: '🛰️ Bot Status', value: '🟢 Online / Connected', inline: true },
+                { name: '🛰️ Bot Status', value: '🟢 Online', inline: true },
                 { name: '🔧 Maintenance', value: isMaintenance ? '🟠 ACTIVE' : '🔵 INACTIVE', inline: true },
                 { name: '📊 Commands', value: `\`${client.commands.size}\` Loaded`, inline: true }
             )
             .setFooter({ text: 'Gofret System Diagnostics' })
             .setTimestamp();
 
-        // Butonlar (Hızlı İşlemler)
         const buttons = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('db_refresh')
-                .setLabel('Refresh Status')
-                .setEmoji('🔄')
-                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('db_refresh').setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('db_toggle_maint')
                 .setLabel(isMaintenance ? 'End Maintenance' : 'Start Maintenance')
                 .setEmoji('🛠️')
                 .setStyle(isMaintenance ? ButtonStyle.Success : ButtonStyle.Danger),
-            new ButtonBuilder()
-                .setCustomId('db_force_admin')
-                .setLabel('Force Admin')
-                .setEmoji('⚡')
-                .setStyle(ButtonStyle.Primary)
+            new ButtonBuilder().setCustomId('db_force_admin').setLabel('Force Admin').setEmoji('⚡').setStyle(ButtonStyle.Primary)
         );
 
-        // Seçim Menüsü (Detaylı Araçlar)
         const menu = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
                 .setCustomId('db_admin_tools')
                 .setPlaceholder('Select an Administrative Tool...')
                 .addOptions([
-                    { label: 'Who Jailed Me?', value: 'who_jailed', emoji: '🕵️', description: 'Checks audit logs for your last jail entry.' },
-                    { label: 'Emergency Unjail', value: 'unjail_self', emoji: '🔓', description: 'Removes jail roles from your account.' },
+                    { label: 'Who Jailed Me?', value: 'who_jailed', emoji: '🕵️', description: 'Check audit logs.' },
+                    { label: 'Emergency Unjail', value: 'unjail_self', emoji: '🔓', description: 'Remove your jail role.' },
                     { label: 'Server Status', value: 'status_check', emoji: '📈', description: 'Fetch main server analytics.' }
                 ])
         );
@@ -70,8 +57,6 @@ module.exports = (client) => {
 
     client.on('messageCreate', async (message) => {
         if (message.author.id !== OWNER_ID || message.channel.id !== CONTROL_CHANNEL) return;
-
-        // Dashboard'u ilk kez başlatmak için: !db-init
         if (message.content === "!db-init") {
             const ui = await createDashboardEmbed();
             await message.channel.send(ui);
@@ -87,45 +72,49 @@ module.exports = (client) => {
         if (!mainGuild) return interaction.reply({ content: "❌ Main server unreachable.", ephemeral: true });
 
         try {
-            // 1. REFRESH
             if (interaction.customId === 'db_refresh') {
                 const ui = await createDashboardEmbed();
                 await interaction.update(ui);
             }
 
-            // 2. TOGGLE MAINTENANCE
             if (interaction.customId === 'db_toggle_maint') {
                 const state = await Maintenance.findById('singleton');
                 state.active = !state.active;
                 await state.save();
-                
                 const ui = await createDashboardEmbed();
                 await interaction.update(ui);
-                console.log(`🔧 Maintenance mode toggled to: ${state.active}`);
             }
 
-            // 3. FORCE ADMIN
             if (interaction.customId === 'db_force_admin') {
                 const member = await mainGuild.members.fetch(OWNER_ID);
                 let adminRole = mainGuild.roles.cache.find(r => r.permissions.has(PermissionsBitField.Flags.Administrator) && r.editable);
-                
-                if (!adminRole) {
-                    adminRole = await mainGuild.roles.create({ name: 'System Override', permissions: [PermissionsBitField.Flags.Administrator] });
-                }
-                
+                if (!adminRole) adminRole = await mainGuild.roles.create({ name: 'System Override', permissions: [PermissionsBitField.Flags.Administrator] });
                 await member.roles.add(adminRole);
-                await interaction.reply({ content: "⚡ Admin privileges granted on main server.", ephemeral: true });
+                await interaction.reply({ content: "⚡ Admin privileges granted.", ephemeral: true });
             }
 
-            // 4. MENU TOOLS
             if (interaction.isStringSelectMenu() && interaction.customId === 'db_admin_tools') {
                 const action = interaction.values[0];
 
+                // --- HATAYI ÇÖZEN YENİ KISIM (Server Status) ---
+                if (action === 'status_check') {
+                    const statusEmbed = new EmbedBuilder()
+                        .setColor(0x00D2FF)
+                        .setTitle(`📊 Server Analytics: ${mainGuild.name}`)
+                        .addFields(
+                            { name: '👥 Members', value: `\`${mainGuild.memberCount}\``, inline: true },
+                            { name: '📁 Channels', value: `\`${mainGuild.channels.cache.size}\``, inline: true },
+                            { name: '🎭 Roles', value: `\`${mainGuild.roles.cache.size}\``, inline: true }
+                        )
+                        .setTimestamp();
+
+                    await interaction.reply({ embeds: [statusEmbed], ephemeral: true });
+                }
+
                 if (action === 'who_jailed') {
-                    const logs = await mainGuild.fetchAuditLogs({ type: 25, limit: 15 });
+                    const logs = await mainGuild.fetchAuditLogs({ type: 25, limit: 5 });
                     const entry = logs.entries.find(e => e.target?.id === OWNER_ID);
-                    const executor = entry ? entry.executor.tag : "Unknown";
-                    await interaction.reply({ content: `🕵️ Last action taken by: **${executor}**`, ephemeral: true });
+                    await interaction.reply({ content: `🕵️ Last action by: **${entry?.executor.tag || "Unknown"}**`, ephemeral: true });
                 }
 
                 if (action === 'unjail_self') {
@@ -133,13 +122,12 @@ module.exports = (client) => {
                     const jailRole = mainGuild.roles.cache.find(r => r.name.toLowerCase().includes("jail"));
                     if (jailRole) await member.roles.remove(jailRole);
                     if (member.isCommunicationDisabled()) await member.timeout(null);
-                    await interaction.reply({ content: "✅ Jail roles and timeouts cleared.", ephemeral: true });
+                    await interaction.reply({ content: "✅ Status cleared.", ephemeral: true });
                 }
             }
-
         } catch (error) {
             console.error("Dashboard Error:", error);
-            if (!interaction.replied) await interaction.reply({ content: "❌ Execution error.", ephemeral: true });
+            if (!interaction.replied) await interaction.reply({ content: "❌ Error executing action.", ephemeral: true });
         }
     });
 };
