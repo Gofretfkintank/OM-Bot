@@ -13,6 +13,7 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
+const http = require('http'); // Added for Passive Monitoring (Heartbeat)
 
 //--------------------------
 // MONGO CONNECT
@@ -118,8 +119,6 @@ client.once('ready', async () => {
 
         //--------------------------
         // MAINTENANCE SNAPSHOT CHECK
-        // If maintenance is active, detect changed/new 
-        // commands automatically after redeploy
         //--------------------------
 
         try {
@@ -133,12 +132,10 @@ client.once('ready', async () => {
                     const oldHash = state.snapshot instanceof Map ? state.snapshot.get(name) : state.snapshot[name];
                     const newHash = hashCommand(cmd);
 
-                    // Newly added command
                     if (!oldHash) {
                         newLocked.push(name);
                         console.log(`🔧 [MAINTENANCE] New command detected: /${name}`);
                     }
-                    // Modified command
                     else if (oldHash !== newHash) {
                         newLocked.push(name);
                         console.log(`🔧 [MAINTENANCE] Modified command detected: /${name}`);
@@ -166,58 +163,41 @@ client.once('ready', async () => {
     //--------------------------
 
     setInterval(async () => {
-
         try {
-
             const votes = await DotyVote.find({
                 finished: false,
                 endTime: { $lte: Date.now() }
             });
 
             for (const vote of votes) {
-
                 try {
-
                     const channel = await client.channels.fetch(vote.channelId).catch(() => null);
                     if (!channel) continue;
 
                     const message = await channel.messages.fetch(vote.messageId).catch(() => null);
 
-                    //--------------------------
-                    // CALCULATE RESULT
-                    //--------------------------
-
                     let max = 0;
-
                     for (const v of vote.votes.values()) {
                         if (v > max) max = v;
                     }
 
                     const winners = [];
-
                     for (const [id, v] of vote.votes) {
                         if (v === max && max > 0) {
                             winners.push(id);
                         }
                     }
 
-                    //--------------------------
-                    // RESULT MESSAGES
-                    //--------------------------
-
                     if (winners.length === 0) {
                         if (message) await message.reply('❌ No votes recorded.');
-
                     } else if (winners.length > 1) {
                         if (message) {
                             await message.reply(
                                 `🤝 **It's a Tie!**\n${winners.map(id => `<@${id}>`).join('\n')} (${max} votes each)`
                             );
                         }
-
                     } else {
                         const winner = winners[0];
-
                         await Driver.findOneAndUpdate(
                             { userId: winner },
                             { $inc: { doty: 1 } },
@@ -231,17 +211,9 @@ client.once('ready', async () => {
                         }
                     }
 
-                    //--------------------------
-                    // DISABLE BUTTONS
-                    //--------------------------
-
                     if (message) {
                         await message.edit({ components: [] }).catch(() => {});
                     }
-
-                    //--------------------------
-                    // MARK FINISHED
-                    //--------------------------
 
                     vote.finished = true;
                     await vote.save();
@@ -250,11 +222,9 @@ client.once('ready', async () => {
                     console.error('VOTE END ERROR:', err);
                 }
             }
-
         } catch (err) {
             console.error('AUTO LOOP ERROR:', err);
         }
-
     }, 15000);
 });
 
@@ -263,10 +233,6 @@ client.once('ready', async () => {
 //--------------------------
 
 client.on('interactionCreate', async interaction => {
-
-    //--------------------------
-    // SLASH COMMANDS
-    //--------------------------
 
     if (interaction.isChatInputCommand()) {
 
@@ -278,33 +244,34 @@ client.on('interactionCreate', async interaction => {
         if (!command) return;
 
         try {
-
             const member = await interaction.guild.members.fetch(interaction.user.id);
-
             const isCommander = interaction.user.id === COMMANDER_ID;
             const isCoOwner = member.roles.cache.has(CO_OWNER_ROLE_ID);
             const hasFullPower = isCommander || isCoOwner;
             const isStaff = member.permissions.has(PermissionsBitField.Flags.ManageMessages);
 
             //--------------------------
-            // MAINTENANCE CHECK
+            // MAINTENANCE & ABSOLUTE LOCKDOWN
             //--------------------------
 
             if (interaction.commandName !== 'maintenance') {
                 try {
                     const state = await Maintenance.findById('singleton');
+                    const isMaintenanceActive = state?.active;
+                    const isCommandLocked = state?.lockedCommands?.includes(interaction.commandName);
 
-                    if (state && state.active && state.lockedCommands.includes(interaction.commandName)) {
-
-                        if (!hasFullPower && !isStaff) {
+                    if (isMaintenanceActive || isCommandLocked) {
+                        
+                        // ABSOLUTE LOCKDOWN: Only the bot creator (Gofret) can bypass this.
+                        if (!isCommander) {
                             return interaction.reply({
                                 content: [
-                                    `🔧 **/ ${interaction.commandName} is currently under maintenance!**`,
+                                    `🔒 **COMMAND LOCKED**`,
                                     ``,
-                                    `**Gofret (the coder)** is cooking some wafers right now 🧇`,
-                                    `*It will be back soon — stay tuned!*`,
+                                    `**Gofret (the coder)** is currently cooking some wafers in the backend 🧇`,
+                                    `*This command is strictly restricted to Developer override only.*`,
                                     ``,
-                                    `Don't worry, there are still plenty of other commands available 👀`
+                                    `Please wait until the system is back online.`
                                 ].join('\n'),
                                 ephemeral: true
                             });
@@ -319,7 +286,6 @@ client.on('interactionCreate', async interaction => {
             const modCommands = new Set(['mute', 'timeout', 'ban', 'kick']);
 
             if (modCommands.has(interaction.commandName)) {
-
                 const target = interaction.options.getMember('target') || interaction.options.getMember('user');
 
                 if (target) {
@@ -361,7 +327,6 @@ client.on('interactionCreate', async interaction => {
     else if (interaction.isButton() && interaction.customId.startsWith('doty_')) {
 
         try {
-
             const votedUserId = interaction.customId.split('_')[1];
 
             const vote = await DotyVote.findOne({
@@ -377,17 +342,14 @@ client.on('interactionCreate', async interaction => {
                 return interaction.reply({ content: '❌ Voting session has ended.', ephemeral: true });
             }
 
-            // Participant Validation
             if (!vote.participants.includes(votedUserId)) {
                 return interaction.reply({ content: '❌ Invalid candidate selection.', ephemeral: true });
             }
 
-            // Duplicate Vote Prevention
             if (vote.voters.includes(interaction.user.id)) {
                 return interaction.reply({ content: '❌ You have already cast your vote.', ephemeral: true });
             }
 
-            // Safe Map Update
             if (!vote.votes.has(votedUserId)) {
                 vote.votes.set(votedUserId, 0);
             }
@@ -403,6 +365,20 @@ client.on('interactionCreate', async interaction => {
             console.error('VOTING BUTTON ERROR:', err);
         }
     }
+});
+
+//--------------------------
+// PASSIVE MONITORING (HEARTBEAT)
+//--------------------------
+// This server keeps Railway active and allows external monitoring tools 
+// (like UptimeRobot) to ping the bot and trigger webhooks if it crashes.
+
+http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.write('Gofret System is Online and cooking 🧇');
+    res.end();
+}).listen(process.env.PORT || 3000, () => {
+    console.log(`📡 Heartbeat server listening on port ${process.env.PORT || 3000}`);
 });
 
 //--------------------------
