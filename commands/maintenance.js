@@ -19,11 +19,12 @@ module.exports = {
         if (!isStaff) {
             return interaction.reply({
                 content: '❌ Administrator permission is required to use this command.',
-                ephemeral: true
+                ephemeral: true // Yetki hatası kanalı kirletmesin diye sadece kullanan görsün
             });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        // BURASI DEĞİŞTİ: ephemeral kaldırıldı, artık herkes görebilir.
+        await interaction.deferReply(); 
 
         //--------------------------
         // CURRENT STATE
