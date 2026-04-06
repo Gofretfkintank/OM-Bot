@@ -260,7 +260,10 @@ client.on('interactionCreate', async interaction => {
                     const isMaintenanceActive = state?.active;
                     const isCommandLocked = state?.lockedCommands?.includes(interaction.commandName);
 
-                    if (isMaintenanceActive || isCommandLocked) {
+                    // Sadece lockedCommands listesindeki komutları engelle.
+                    // isMaintenanceActive tek başına yeterli değil — bakım açık olsa bile
+                    // değişmeyen komutlar normal çalışmaya devam etmeli.
+                    if (isCommandLocked) {
                         
                         // ABSOLUTE LOCKDOWN: Only the bot creator (Gofret) can bypass this.
                         if (!isCommander) {
