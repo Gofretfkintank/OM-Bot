@@ -5,7 +5,10 @@ const {
     ButtonStyle,
     StringSelectMenuBuilder,
     PermissionsBitField,
-    ChannelType
+    ChannelType,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle
 } = require('discord.js');
 const Maintenance = require('../models/Maintenance');
 
@@ -14,8 +17,10 @@ module.exports = (client) => {
     const MAIN_SERVER     = "1446960659072946218";
     const CONTROL_CHANNEL = "1488543017794142309";
 
-    // Komut sayfası state'i (memory, ephemeral yok)
-    const cmdPage = new Map(); // userId → pageIndex
+    // Komut sayfa state'i (memory-only)
+    const cmdPage = new Map();
+    // Kanal viewer state: hangi kategori seçildi
+    const channelState = new Map(); // userId → { categoryId }
 
     //--------------------------
     // HELPERS
@@ -27,26 +32,24 @@ module.exports = (client) => {
         return chunks;
     }
 
-    function buildCmdRow(cmdOptions, page, lockedCmds) {
-        // Her sayfada max 25 seçenek (Discord limiti)
-        const pages   = chunkArray(cmdOptions, 25);
+    function buildCmdRows(cmdList, page, lockedCmds) {
+        const pages   = chunkArray(cmdList, 25);
         const current = pages[page] || pages[0];
 
         const select = new StringSelectMenuBuilder()
             .setCustomId('db_cmd_lock')
             .setPlaceholder(`🛡️ Toggle Command Lock... (Page ${page + 1}/${pages.length})`)
             .addOptions(current.map(c => ({
-                label: `/${c.data.name}`,
-                value: c.data.name,
+                label:       `/${c.data.name}`,
+                value:       c.data.name,
                 description: lockedCmds.includes(c.data.name) ? '🔴 Locked' : '🟢 Open',
-                emoji: lockedCmds.includes(c.data.name) ? '🔒' : '🔓'
+                emoji:       lockedCmds.includes(c.data.name) ? '🔒' : '🔓'
             })));
 
-        const row = new ActionRowBuilder().addComponents(select);
+        const rows = [new ActionRowBuilder().addComponents(select)];
 
-        // Sayfa butonları (sadece 1'den fazla sayfa varsa)
         if (pages.length > 1) {
-            const navRow = new ActionRowBuilder().addComponents(
+            rows.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('db_cmd_prev')
                     .setEmoji('⬅️')
@@ -57,11 +60,10 @@ module.exports = (client) => {
                     .setEmoji('➡️')
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(page >= pages.length - 1)
-            );
-            return [row, navRow];
+            ));
         }
 
-        return [row];
+        return rows;
     }
 
     async function getDashboardUI(userId = OWNER_ID) {
@@ -74,6 +76,14 @@ module.exports = (client) => {
         const lockedCmds = settings.lockedCommands || [];
         const page       = cmdPage.get(userId) || 0;
 
+        // Online count — GuildPresences intent gerekli
+        const guild      = client.guilds.cache.get(MAIN_SERVER);
+        const onlineCount = guild
+            ? guild.members.cache.filter(m =>
+                !m.user.bot && m.presence?.status && m.presence.status !== 'offline'
+              ).size
+            : 0;
+
         const embed = new EmbedBuilder()
             .setColor(isLocked ? 0xff0000 : 0x00ff00)
             .setTitle('🏎️ Gofret Pit Wall | Operations')
@@ -82,19 +92,14 @@ module.exports = (client) => {
                 `**System Status:** ${isLocked ? '🔴 PANIC LOCKDOWN (Gofret Mode)' : '🟢 Fully Operational'}`
             )
             .addFields(
-                {
-                    name: '🔒 Locked Commands',
-                    value: lockedCmds.length > 0 ? `\`${lockedCmds.join(', ')}\`` : 'None',
-                    inline: false
-                },
-                { name: '🛰️ Last Heartbeat',  value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
-                { name: '📊 Loaded Modules',  value: `\`${client.commands.size}\` Commands`,   inline: true },
-                { name: '🔒 Locked Count',    value: `\`${lockedCmds.length}\` Commands`,      inline: true }
+                { name: '🔒 Locked Commands', value: lockedCmds.length > 0 ? `\`${lockedCmds.join(', ')}\`` : 'None', inline: false },
+                { name: '🛰️ Last Heartbeat',  value: `<t:${Math.floor(Date.now() / 1000)}:R>`,   inline: true },
+                { name: '📊 Loaded Modules',  value: `\`${client.commands.size}\` Commands`,      inline: true },
+                { name: '🟢 Online Now',       value: `\`${onlineCount}\``,                       inline: true }
             )
             .setFooter({ text: 'Gofret is cooking • Absolute Security' })
             .setTimestamp();
 
-        // Row 1: Fast Actions
         const row1 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('db_refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
@@ -114,76 +119,167 @@ module.exports = (client) => {
                 .setStyle(ButtonStyle.Secondary)
         );
 
-        // Row 2: Admin Tools
         const row2 = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
                 .setCustomId('db_admin_tools')
                 .setPlaceholder('🔧 Select Admin Tool...')
                 .addOptions([
-                    { label: 'Who Jailed Me?',         value: 'who_jailed',   emoji: '🕵️', description: 'Check audit logs for jail actions.' },
-                    { label: 'Emergency Unjail',        value: 'unjail_self',  emoji: '🔓', description: 'Remove jail roles and timeouts.' },
-                    { label: 'Main Server Analytics',   value: 'status_check', emoji: '📈', description: 'Fetch live server stats.' }
+                    { label: 'Who Jailed Me?',       value: 'who_jailed',   emoji: '🕵️', description: 'Check audit logs for jail actions.' },
+                    { label: 'Emergency Unjail',      value: 'unjail_self',  emoji: '🔓', description: 'Remove jail roles and timeouts.' },
+                    { label: 'Main Server Analytics', value: 'status_check', emoji: '📈', description: 'Fetch live server stats.' }
                 ])
         );
 
-        // Row 3+: Command Locker (sayfalı)
-        const cmdList   = [...client.commands.values()];
-        const cmdRows   = buildCmdRow(cmdList, page, lockedCmds);
+        const cmdRows = buildCmdRows([...client.commands.values()], page, lockedCmds);
 
         return { embeds: [embed], components: [row1, row2, ...cmdRows] };
     }
 
     //--------------------------
-    // CHANNEL VIEWER
+    // CHANNEL VIEWER — Step 1: Kategori listesi
     //--------------------------
 
-    async function buildChannelSelectUI(guild) {
-        // Sadece text/forum/announcement kanalları, max 25
-        const textChannels = guild.channels.cache
-            .filter(c => [
-                ChannelType.GuildText,
-                ChannelType.GuildAnnouncement,
-                ChannelType.GuildForum
-            ].includes(c.type))
+    function buildCategorySelect(guild) {
+        const categories = guild.channels.cache
+            .filter(c => c.type === ChannelType.GuildCategory)
+            .sort((a, b) => a.rawPosition - b.rawPosition)
             .first(25);
 
-        if (textChannels.length === 0) {
-            return { content: '❌ No readable text channels found.', ephemeral: true };
+        if (categories.length === 0) {
+            return { content: '❌ No categories found.', ephemeral: true };
+        }
+
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('db_category_select')
+            .setPlaceholder('📂 Select a category...')
+            .addOptions(categories.map(cat => {
+                const childCount = guild.channels.cache.filter(c => c.parentId === cat.id).size;
+                return {
+                    label:       cat.name.slice(0, 25),
+                    value:       cat.id,
+                    description: `${childCount} channel${childCount !== 1 ? 's' : ''}`
+                };
+            }));
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle('📡 Channel Viewer — Step 1')
+            .setDescription('Select a **category** to browse its channels.')
+            .setTimestamp();
+
+        return {
+            embeds:     [embed],
+            components: [new ActionRowBuilder().addComponents(select)],
+            ephemeral:  true
+        };
+    }
+
+    //--------------------------
+    // CHANNEL VIEWER — Step 2: Kategorideki kanallar
+    //--------------------------
+
+    function buildChannelSelect(guild, categoryId) {
+        const category = guild.channels.cache.get(categoryId);
+        const channels = guild.channels.cache
+            .filter(c =>
+                c.parentId === categoryId &&
+                [ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.GuildForum].includes(c.type)
+            )
+            .sort((a, b) => a.rawPosition - b.rawPosition)
+            .first(25);
+
+        if (channels.length === 0) {
+            return { content: `❌ No readable channels in **${category?.name || 'this category'}**.`, ephemeral: true };
         }
 
         const select = new StringSelectMenuBuilder()
             .setCustomId('db_channel_select')
-            .setPlaceholder('📡 Select a channel to view...')
-            .addOptions(textChannels.map(c => ({
-                label: `#${c.name}`,
-                value: c.id,
-                description: c.topic ? c.topic.slice(0, 50) : `Category: ${c.parent?.name || 'None'}`
+            .setPlaceholder('📡 Select a channel...')
+            .addOptions(channels.map(c => ({
+                label:       `#${c.name}`.slice(0, 25),
+                value:       c.id,
+                description: c.topic ? c.topic.slice(0, 50) : `${channelTypeName(c.type)} channel`
             })));
+
+        // "View messages" ve "Send message" seçeneklerini ayrı tutuyoruz —
+        // kanal seçimi yapılınca ne yapmak istediğini soran 2. menü gelecek
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(`📡 Channel Viewer — ${category?.name || 'Category'}`)
+            .setDescription('Select a channel to **view messages** or **send a message** as the bot.')
+            .setTimestamp();
+
+        const backRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('db_channels')
+                .setLabel('← Back to Categories')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+        return {
+            embeds:     [embed],
+            components: [new ActionRowBuilder().addComponents(select), backRow],
+            ephemeral:  true
+        };
+    }
+
+    //--------------------------
+    // CHANNEL VIEWER — Step 3: Ne yapmak istiyorsun?
+    //--------------------------
+
+    function buildChannelActions(channelId, channelName) {
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('db_channel_action')
+            .setPlaceholder('What do you want to do?')
+            .addOptions([
+                {
+                    label:       '📖 View Last Messages',
+                    value:       `view:${channelId}`,
+                    description: 'Load the last 10 messages from this channel.',
+                    emoji:       '📖'
+                },
+                {
+                    label:       '✉️ Send Message as Bot',
+                    value:       `send:${channelId}`,
+                    description: 'Type a message and bot will post it in this channel.',
+                    emoji:       '✉️'
+                }
+            ]);
 
         const embed = new EmbedBuilder()
             .setColor(0x5865F2)
-            .setTitle('📡 Channel Viewer')
-            .setDescription('Select a channel to load its last 10 messages.\n⚠️ Data is fetched on-demand to avoid rate limits.')
+            .setTitle(`📡 #${channelName}`)
+            .setDescription('Choose an action for this channel.')
             .setTimestamp();
 
         return {
-            embeds: [embed],
+            embeds:     [embed],
             components: [new ActionRowBuilder().addComponents(select)],
-            ephemeral: true
+            ephemeral:  true
         };
     }
+
+    //--------------------------
+    // CHANNEL VIEWER — Mesaj görüntüle
+    //--------------------------
 
     async function buildChannelContent(channel) {
         const messages = await channel.messages.fetch({ limit: 10 });
         const sorted   = [...messages.values()].reverse();
 
         if (sorted.length === 0) {
-            return { content: `📭 **#${channel.name}** is empty or has no recent messages.`, ephemeral: true };
+            return { content: `📭 **#${channel.name}** has no recent messages.`, ephemeral: true };
         }
 
         const lines = sorted.map(m => {
             const time    = `<t:${Math.floor(m.createdTimestamp / 1000)}:T>`;
-            const content = m.content ? m.content.slice(0, 80) : (m.embeds.length ? '[Embed]' : '[Attachment/Other]');
+            const content = m.content
+                ? m.content.slice(0, 80)
+                : m.embeds.length
+                    ? '[Embed]'
+                    : m.attachments.size
+                        ? '[Attachment]'
+                        : '[Other]';
             return `${time} **${m.author.username}:** ${content}`;
         });
 
@@ -195,6 +291,21 @@ module.exports = (client) => {
             .setTimestamp();
 
         return { embeds: [embed], ephemeral: true };
+    }
+
+    //--------------------------
+    // HELPERS
+    //--------------------------
+
+    function channelTypeName(type) {
+        const map = {
+            [ChannelType.GuildText]:         'Text',
+            [ChannelType.GuildVoice]:        'Voice',
+            [ChannelType.GuildAnnouncement]: 'Announcement',
+            [ChannelType.GuildForum]:        'Forum',
+            [ChannelType.GuildStageVoice]:   'Stage',
+        };
+        return map[type] || 'Unknown';
     }
 
     //--------------------------
@@ -214,17 +325,34 @@ module.exports = (client) => {
     });
 
     //--------------------------
-    // INTERACTION HANDLER
+    // MODAL SUBMIT — Bot mesaj gönderimi
     //--------------------------
 
     client.on('interactionCreate', async (interaction) => {
+        if (interaction.isModalSubmit() && interaction.customId.startsWith('db_send_modal:')) {
+            if (interaction.user.id !== OWNER_ID) return;
+
+            const channelId = interaction.customId.split(':')[1];
+            const content   = interaction.fields.getTextInputValue('db_msg_content');
+
+            try {
+                const channel = await client.channels.fetch(channelId);
+                await channel.send(content);
+                await interaction.reply({ content: `✅ Message sent to <#${channelId}>.`, ephemeral: true });
+            } catch (e) {
+                await interaction.reply({ content: `❌ Failed to send: ${e.message}`, ephemeral: true });
+            }
+            return;
+        }
+
+        //--------------------------
+        // DASHBOARD INTERACTIONS
+        //--------------------------
+
         if (!interaction.customId?.startsWith('db_')) return;
 
         if (interaction.user.id !== OWNER_ID) {
-            return interaction.reply({
-                content: '❌ **Access Denied:** Only Gofret can use this panel.',
-                ephemeral: true
-            });
+            return interaction.reply({ content: '❌ **Access Denied:** Only Gofret can use this panel.', ephemeral: true });
         }
 
         const mainGuild = client.guilds.cache.get(MAIN_SERVER);
@@ -232,19 +360,19 @@ module.exports = (client) => {
 
         try {
 
-            // ── REFRESH ──────────────────────────────────────
+            // ── REFRESH ──────────────────────────────────────────
             if (interaction.customId === 'db_refresh') {
                 return interaction.update(await getDashboardUI(interaction.user.id));
             }
 
-            // ── PANIC ─────────────────────────────────────────
+            // ── PANIC ─────────────────────────────────────────────
             if (interaction.customId === 'db_panic') {
                 settings.active = !settings.active;
                 await settings.save();
                 return interaction.update(await getDashboardUI(interaction.user.id));
             }
 
-            // ── FORCE ADMIN ───────────────────────────────────
+            // ── FORCE ADMIN ───────────────────────────────────────
             if (interaction.customId === 'db_force_admin') {
                 if (!mainGuild) return interaction.reply({ content: '❌ Main server not found.', ephemeral: true });
                 const member = await mainGuild.members.fetch(OWNER_ID);
@@ -253,51 +381,98 @@ module.exports = (client) => {
                 );
                 if (!role) {
                     role = await mainGuild.roles.create({
-                        name: 'System Override',
+                        name:        'System Override',
                         permissions: [PermissionsBitField.Flags.Administrator]
                     });
                 }
                 await member.roles.add(role);
-                return interaction.reply({ content: '⚡ **Absolute Power Granted.** You are now Administrator.', ephemeral: true });
+                return interaction.reply({ content: '⚡ **Absolute Power Granted.**', ephemeral: true });
             }
 
-            // ── CHANNELS BUTTON ───────────────────────────────
+            // ── CHANNELS — Kategori listesi ───────────────────────
             if (interaction.customId === 'db_channels') {
-                if (!mainGuild) return interaction.reply({ content: '❌ Main server not found.', ephemeral: true });
-                return interaction.reply(await buildChannelSelectUI(mainGuild));
+                if (!mainGuild) return interaction.reply({ content: '❌ Server not found.', ephemeral: true });
+                const ui = buildCategorySelect(mainGuild);
+                return interaction.replied || interaction.deferred
+                    ? interaction.editReply(ui)
+                    : interaction.reply(ui);
             }
 
-            // ── CHANNEL SELECT ────────────────────────────────
+            // ── CATEGORY SELECT ───────────────────────────────────
+            if (interaction.customId === 'db_category_select') {
+                const categoryId = interaction.values[0];
+                channelState.set(interaction.user.id, { categoryId });
+                return interaction.update(buildChannelSelect(mainGuild, categoryId));
+            }
+
+            // ── CHANNEL SELECT ────────────────────────────────────
             if (interaction.customId === 'db_channel_select') {
-                const channelId = interaction.values[0];
-                const channel   = mainGuild?.channels.cache.get(channelId);
+                const channelId  = interaction.values[0];
+                const channel    = mainGuild?.channels.cache.get(channelId);
                 if (!channel) return interaction.reply({ content: '❌ Channel not found.', ephemeral: true });
-                return interaction.reply(await buildChannelContent(channel));
+                return interaction.update(buildChannelActions(channelId, channel.name));
             }
 
-            // ── ADMIN TOOLS ───────────────────────────────────
+            // ── CHANNEL ACTION (view / send) ──────────────────────
+            if (interaction.customId === 'db_channel_action') {
+                const [action, channelId] = interaction.values[0].split(':');
+                const channel = await client.channels.fetch(channelId).catch(() => null);
+                if (!channel) return interaction.reply({ content: '❌ Channel not found.', ephemeral: true });
+
+                if (action === 'view') {
+                    return interaction.update(await buildChannelContent(channel));
+                }
+
+                if (action === 'send') {
+                    // Modal aç — bot adına mesaj yazdır
+                    const modal = new ModalBuilder()
+                        .setCustomId(`db_send_modal:${channelId}`)
+                        .setTitle(`Send to #${channel.name}`);
+
+                    const input = new TextInputBuilder()
+                        .setCustomId('db_msg_content')
+                        .setLabel('Message Content')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setMaxLength(2000)
+                        .setRequired(true)
+                        .setPlaceholder('Type the message the bot will send...');
+
+                    modal.addComponents(new ActionRowBuilder().addComponents(input));
+                    return interaction.showModal(modal);
+                }
+            }
+
+            // ── ADMIN TOOLS ───────────────────────────────────────
             if (interaction.customId === 'db_admin_tools') {
                 const action = interaction.values[0];
 
                 if (action === 'status_check') {
                     if (!mainGuild) return interaction.reply({ content: '❌ Server not found.', ephemeral: true });
-                    await mainGuild.members.fetch(); // cache yenile
-                    const onlineCount = mainGuild.members.cache.filter(m => m.presence?.status !== 'offline').size;
+                    await mainGuild.members.fetch();
+
+                    const total   = mainGuild.memberCount;
+                    const bots    = mainGuild.members.cache.filter(m => m.user.bot).size;
+                    const humans  = total - bots;
+                    // Presence intent gerekli; yoksa 0 döner
+                    const online  = mainGuild.members.cache.filter(m =>
+                        !m.user.bot && m.presence?.status && m.presence.status !== 'offline'
+                    ).size;
 
                     const embed = new EmbedBuilder()
                         .setColor(0x00D2FF)
                         .setTitle(`📊 Live Analytics: ${mainGuild.name}`)
                         .setThumbnail(mainGuild.iconURL())
                         .addFields(
-                            { name: '👥 Total Members',   value: `\`${mainGuild.memberCount}\``,                                    inline: true },
-                            { name: '🟢 Online',          value: `\`${onlineCount}\``,                                              inline: true },
-                            { name: '🤖 Bots',            value: `\`${mainGuild.members.cache.filter(m => m.user.bot).size}\``,     inline: true },
-                            { name: '📁 Channels',        value: `\`${mainGuild.channels.cache.size}\``,                            inline: true },
-                            { name: '🎭 Roles',           value: `\`${mainGuild.roles.cache.size}\``,                               inline: true },
-                            { name: '😀 Emojis',          value: `\`${mainGuild.emojis.cache.size}\``,                              inline: true },
-                            { name: '🚀 Boosts',          value: `\`${mainGuild.premiumSubscriptionCount || 0}\``,                  inline: true },
-                            { name: '📅 Created',         value: `<t:${Math.floor(mainGuild.createdTimestamp / 1000)}:D>`,          inline: true },
-                            { name: '👑 Owner',           value: `<@${mainGuild.ownerId}>`,                                         inline: true }
+                            { name: '👥 Total Members', value: `\`${total}\``,                              inline: true },
+                            { name: '🧑 Humans',         value: `\`${humans}\``,                             inline: true },
+                            { name: '🤖 Bots',           value: `\`${bots}\``,                              inline: true },
+                            { name: '🟢 Online',          value: `\`${online}\` *(Presence Intent req.)*`,   inline: true },
+                            { name: '📁 Channels',        value: `\`${mainGuild.channels.cache.size}\``,     inline: true },
+                            { name: '🎭 Roles',           value: `\`${mainGuild.roles.cache.size}\``,        inline: true },
+                            { name: '😀 Emojis',          value: `\`${mainGuild.emojis.cache.size}\``,       inline: true },
+                            { name: '🚀 Boosts',          value: `\`${mainGuild.premiumSubscriptionCount || 0}\``, inline: true },
+                            { name: '📅 Created',         value: `<t:${Math.floor(mainGuild.createdTimestamp / 1000)}:D>`, inline: true },
+                            { name: '👑 Owner',           value: `<@${mainGuild.ownerId}>`,                  inline: true }
                         )
                         .setTimestamp();
 
@@ -305,10 +480,11 @@ module.exports = (client) => {
                 }
 
                 if (action === 'who_jailed') {
-                    const logs  = await mainGuild.fetchAuditLogs({ type: 25, limit: 10 });
+                    const { AuditLogEvent } = require('discord.js');
+                    const logs  = await mainGuild.fetchAuditLogs({ type: AuditLogEvent.MemberUpdate, limit: 10 });
                     const entry = logs.entries.find(e => e.target?.id === OWNER_ID);
                     return interaction.reply({
-                        content: `🕵️ Last moderation action on you: **${entry?.executor.tag || 'Unknown/None'}**`,
+                        content:  `🕵️ Last mod action on you: **${entry?.executor.tag || 'Unknown/None'}**`,
                         ephemeral: true
                     });
                 }
@@ -322,27 +498,24 @@ module.exports = (client) => {
                 }
             }
 
-            // ── CMD LOCK SELECT ───────────────────────────────
+            // ── CMD LOCK SELECT ───────────────────────────────────
             if (interaction.customId === 'db_cmd_lock') {
                 const cmdName = interaction.values[0];
                 if (!settings.lockedCommands) settings.lockedCommands = [];
 
-                if (settings.lockedCommands.includes(cmdName)) {
-                    settings.lockedCommands = settings.lockedCommands.filter(c => c !== cmdName);
-                } else {
-                    settings.lockedCommands.push(cmdName);
-                }
+                settings.lockedCommands = settings.lockedCommands.includes(cmdName)
+                    ? settings.lockedCommands.filter(c => c !== cmdName)
+                    : [...settings.lockedCommands, cmdName];
 
                 await settings.save();
                 return interaction.update(await getDashboardUI(interaction.user.id));
             }
 
-            // ── CMD PAGE NAV ──────────────────────────────────
+            // ── CMD PAGE NAV ──────────────────────────────────────
             if (interaction.customId === 'db_cmd_prev' || interaction.customId === 'db_cmd_next') {
-                const current  = cmdPage.get(interaction.user.id) || 0;
-                const allCmds  = [...client.commands.values()];
-                const maxPage  = Math.ceil(allCmds.length / 25) - 1;
-                const newPage  = interaction.customId === 'db_cmd_next'
+                const current = cmdPage.get(interaction.user.id) || 0;
+                const maxPage = Math.ceil(client.commands.size / 25) - 1;
+                const newPage = interaction.customId === 'db_cmd_next'
                     ? Math.min(current + 1, maxPage)
                     : Math.max(current - 1, 0);
 
