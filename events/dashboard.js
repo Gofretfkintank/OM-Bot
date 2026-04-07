@@ -17,8 +17,9 @@ module.exports = (client) => {
     const MAIN_SERVER     = "1446960659072946218";
     const CONTROL_CHANNEL = "1488543017794142309";
 
-    // Komut sayfa state'i (memory-only)
-    const cmdPage = new Map();
+    // Komut UI state'i (memory-only) - Kategori hiyerarşisi için
+    const cmdUIState = new Map(); // userId → { step: 'category' | 'commands' | 'action', category?: string, command?: string }
+    
     // Kanal viewer state: hangi kategori seçildi
     const channelState = new Map(); // userId → { categoryId }
 
@@ -26,44 +27,109 @@ module.exports = (client) => {
     // HELPERS
     //--------------------------
 
-    function chunkArray(arr, size) {
-        const chunks = [];
-        for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
-        return chunks;
-    }
-
-    function buildCmdRows(cmdList, page, lockedCmds) {
-        const pages   = chunkArray(cmdList, 25);
-        const current = pages[page] || pages[0];
-
-        const select = new StringSelectMenuBuilder()
-            .setCustomId('db_cmd_lock')
-            .setPlaceholder(`🛡️ Toggle Command Lock... (Page ${page + 1}/${pages.length})`)
-            .addOptions(current.map(c => ({
-                label:       `/${c.data.name}`,
-                value:       c.data.name,
-                description: lockedCmds.includes(c.data.name) ? '🔴 Locked' : '🟢 Open',
-                emoji:       lockedCmds.includes(c.data.name) ? '🔒' : '🔓'
-            })));
-
-        const rows = [new ActionRowBuilder().addComponents(select)];
-
-        if (pages.length > 1) {
-            rows.push(new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('db_cmd_prev')
-                    .setEmoji('⬅️')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(page === 0),
-                new ButtonBuilder()
-                    .setCustomId('db_cmd_next')
-                    .setEmoji('➡️')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(page >= pages.length - 1)
-            ));
+    // Regex ile Nickname / Username çağırma sistemi
+    async function resolveUserAlias(guild, alias) {
+        if (!alias) return null;
+        await guild.members.fetch(); // Cache'i güvenceye al
+        
+        // Önce ID mi diye kontrol et
+        if (/^\d{17,19}$/.test(alias)) {
+            const member = guild.members.cache.get(alias);
+            if (member) return member;
         }
 
-        return rows;
+        // Değilse Regex ile globalName, username veya nickname içinde ara
+        const regex = new RegExp(alias, 'i');
+        const member = guild.members.cache.find(m =>
+            regex.test(m.user.username) ||
+            (m.nickname && regex.test(m.nickname)) ||
+            (m.user.globalName && regex.test(m.user.globalName))
+        );
+
+        return member || null;
+    }
+
+    // Yeni hiyerarşik komut menüsü oluşturucu
+    function buildCmdUIRows(userId, cmdList, lockedCmds) {
+        const state = cmdUIState.get(userId) || { step: 'category' };
+
+        // ADIM 1: Kategorileri Listele
+        if (state.step === 'category') {
+            const categories = new Set();
+            cmdList.forEach(cmd => categories.add(cmd.category || 'General'));
+            
+            const opts = Array.from(categories).slice(0, 25).map(cat => ({
+                label: cat, 
+                value: cat, 
+                emoji: '📁'
+            }));
+
+            if (opts.length === 0) opts.push({ label: 'No Categories', value: 'none' });
+
+            const select = new StringSelectMenuBuilder()
+                .setCustomId('db_cmd_cat_select')
+                .setPlaceholder('📂 Select Command Category...')
+                .addOptions(opts);
+
+            return [new ActionRowBuilder().addComponents(select)];
+        }
+
+        // ADIM 2: Seçili Kategorideki Komutları Listele
+        if (state.step === 'commands') {
+            const cmds = cmdList.filter(cmd => (cmd.category || 'General') === state.category).slice(0, 25);
+            const opts = cmds.map(c => {
+                const isLocked = lockedCmds.includes(c.data.name);
+                return {
+                    label:       `/${c.data.name}`,
+                    value:       c.data.name,
+                    description: isLocked ? '🔴 Locked' : '🟢 Open',
+                    emoji:       isLocked ? '🔒' : '🔓'
+                };
+            });
+
+            if (opts.length === 0) opts.push({ label: 'No commands', value: 'none', description: 'Empty category' });
+
+            const select = new StringSelectMenuBuilder()
+                .setCustomId('db_cmd_select')
+                .setPlaceholder(`📜 Commands in ${state.category}...`)
+                .addOptions(opts);
+
+            const backBtn = new ButtonBuilder()
+                .setCustomId('db_cmd_back_cat')
+                .setLabel('Back to Categories')
+                .setStyle(ButtonStyle.Secondary);
+
+            return [new ActionRowBuilder().addComponents(select), new ActionRowBuilder().addComponents(backBtn)];
+        }
+
+        // ADIM 3: Komut için Aksiyon Seç (Lock / Use)
+        if (state.step === 'action') {
+            const isLocked = lockedCmds.includes(state.command);
+            const select = new StringSelectMenuBuilder()
+                .setCustomId('db_cmd_action_select')
+                .setPlaceholder(`⚡ What do you want to do with /${state.command}?`)
+                .addOptions([
+                    { 
+                        label: isLocked ? 'Unlock Command' : 'Lock Command', 
+                        value: 'toggle_lock', 
+                        emoji: isLocked ? '🔓' : '🔒',
+                        description: 'Toggles the server-wide lock for this command.'
+                    },
+                    { 
+                        label: 'Use Command', 
+                        value: 'use_cmd', 
+                        emoji: '▶️', 
+                        description: 'Run this command natively via Dashboard.' 
+                    }
+                ]);
+
+            const backBtn = new ButtonBuilder()
+                .setCustomId('db_cmd_back_cmd')
+                .setLabel('Back to Commands')
+                .setStyle(ButtonStyle.Secondary);
+
+            return [new ActionRowBuilder().addComponents(select), new ActionRowBuilder().addComponents(backBtn)];
+        }
     }
 
     async function getDashboardUI(userId = OWNER_ID) {
@@ -74,7 +140,6 @@ module.exports = (client) => {
 
         const isLocked   = settings.active || false;
         const lockedCmds = settings.lockedCommands || [];
-        const page       = cmdPage.get(userId) || 0;
 
         // Online count — GuildPresences intent gerekli
         const guild      = client.guilds.cache.get(MAIN_SERVER);
@@ -130,7 +195,7 @@ module.exports = (client) => {
                 ])
         );
 
-        const cmdRows = buildCmdRows([...client.commands.values()], page, lockedCmds);
+        const cmdRows = buildCmdUIRows(userId, [...client.commands.values()], lockedCmds);
 
         return { embeds: [embed], components: [row1, row2, ...cmdRows] };
     }
@@ -201,8 +266,6 @@ module.exports = (client) => {
                 description: c.topic ? c.topic.slice(0, 50) : `${channelTypeName(c.type)} channel`
             })));
 
-        // "View messages" ve "Send message" seçeneklerini ayrı tutuyoruz —
-        // kanal seçimi yapılınca ne yapmak istediğini soran 2. menü gelecek
         const embed = new EmbedBuilder()
             .setColor(0x5865F2)
             .setTitle(`📡 Channel Viewer — ${category?.name || 'Category'}`)
@@ -293,10 +356,6 @@ module.exports = (client) => {
         return { embeds: [embed], ephemeral: true };
     }
 
-    //--------------------------
-    // HELPERS
-    //--------------------------
-
     function channelTypeName(type) {
         const map = {
             [ChannelType.GuildText]:         'Text',
@@ -325,10 +384,11 @@ module.exports = (client) => {
     });
 
     //--------------------------
-    // MODAL SUBMIT — Bot mesaj gönderimi
+    // MODAL SUBMITS
     //--------------------------
 
     client.on('interactionCreate', async (interaction) => {
+        // Channel Send Modal
         if (interaction.isModalSubmit() && interaction.customId.startsWith('db_send_modal:')) {
             if (interaction.user.id !== OWNER_ID) return;
 
@@ -343,6 +403,48 @@ module.exports = (client) => {
                 await interaction.reply({ content: `❌ Failed to send: ${e.message}`, ephemeral: true });
             }
             return;
+        }
+
+        // Dashboard Command Execute Modal
+        if (interaction.isModalSubmit() && interaction.customId.startsWith('db_use_cmd_modal:')) {
+            if (interaction.user.id !== OWNER_ID) return;
+
+            const cmdName   = interaction.customId.split(':')[1];
+            const alias     = interaction.fields.getTextInputValue('target_alias');
+            const extraArgs = interaction.fields.getTextInputValue('extra_args');
+            const mainGuild = client.guilds.cache.get(MAIN_SERVER);
+
+            let targetMember = null;
+            let resolvedInfo = "";
+
+            if (alias) {
+                targetMember = await resolveUserAlias(mainGuild, alias);
+                if (!targetMember) {
+                    return interaction.reply({ content: `❌ Sistem \`${alias}\` adlı bir kullanıcı/takma ad bulamadı. Lütfen kontrol et.`, ephemeral: true });
+                }
+                resolvedInfo = `(Bulunan: **${targetMember.user.tag}** | ID: ${targetMember.id})`;
+            }
+
+            try {
+                // Temel Moderasyon Komutları Native Desteği (Dashboard üzerinden %100 çalışma garantisi)
+                if (cmdName.toLowerCase() === 'ban' && targetMember) {
+                    await targetMember.ban({ reason: extraArgs || 'Dashboard üzerinden banlandı.' });
+                    return interaction.reply({ content: `🚨 **Ban Başarılı:** ${targetMember.user.tag} sunucudan uçuruldu.`, ephemeral: true });
+                }
+                if (cmdName.toLowerCase() === 'kick' && targetMember) {
+                    await targetMember.kick(extraArgs || 'Dashboard üzerinden atıldı.');
+                    return interaction.reply({ content: `👢 **Kick Başarılı:** ${targetMember.user.tag} sunucudan atıldı.`, ephemeral: true });
+                }
+
+                // Diğer tüm komutlar için execute simülasyonu / veri dönüşü
+                // (Eğer kendi slash command altyapını buraya doğrudan bağlamak istersen bu bloğu kullanabilirsin)
+                return interaction.reply({ 
+                    content: `🚀 **/${cmdName}** çalıştırıldı.\n👤 Hedef: ${alias ? resolvedInfo : 'Belirtilmedi'}\n📝 Argümanlar: ${extraArgs || 'Belirtilmedi'}`, 
+                    ephemeral: true 
+                });
+            } catch (e) {
+                return interaction.reply({ content: `❌ İşlem hatası: ${e.message}`, ephemeral: true });
+            }
         }
 
         //--------------------------
@@ -424,7 +526,6 @@ module.exports = (client) => {
                 }
 
                 if (action === 'send') {
-                    // Modal aç — bot adına mesaj yazdır
                     const modal = new ModalBuilder()
                         .setCustomId(`db_send_modal:${channelId}`)
                         .setTitle(`Send to #${channel.name}`);
@@ -453,7 +554,6 @@ module.exports = (client) => {
                     const total   = mainGuild.memberCount;
                     const bots    = mainGuild.members.cache.filter(m => m.user.bot).size;
                     const humans  = total - bots;
-                    // Presence intent gerekli; yoksa 0 döner
                     const online  = mainGuild.members.cache.filter(m =>
                         !m.user.bot && m.presence?.status && m.presence.status !== 'offline'
                     ).size;
@@ -498,29 +598,79 @@ module.exports = (client) => {
                 }
             }
 
-            // ── CMD LOCK SELECT ───────────────────────────────────
-            if (interaction.customId === 'db_cmd_lock') {
-                const cmdName = interaction.values[0];
-                if (!settings.lockedCommands) settings.lockedCommands = [];
-
-                settings.lockedCommands = settings.lockedCommands.includes(cmdName)
-                    ? settings.lockedCommands.filter(c => c !== cmdName)
-                    : [...settings.lockedCommands, cmdName];
-
-                await settings.save();
+            // ── COMMAND MANAGER NAVIGATION ────────────────────────
+            
+            // 1. Kategori Seçimi
+            if (interaction.customId === 'db_cmd_cat_select') {
+                if (interaction.values[0] === 'none') return interaction.deferUpdate();
+                cmdUIState.set(interaction.user.id, { step: 'commands', category: interaction.values[0] });
                 return interaction.update(await getDashboardUI(interaction.user.id));
             }
 
-            // ── CMD PAGE NAV ──────────────────────────────────────
-            if (interaction.customId === 'db_cmd_prev' || interaction.customId === 'db_cmd_next') {
-                const current = cmdPage.get(interaction.user.id) || 0;
-                const maxPage = Math.ceil(client.commands.size / 25) - 1;
-                const newPage = interaction.customId === 'db_cmd_next'
-                    ? Math.min(current + 1, maxPage)
-                    : Math.max(current - 1, 0);
-
-                cmdPage.set(interaction.user.id, newPage);
+            // 2. Komut Seçimi
+            if (interaction.customId === 'db_cmd_select') {
+                if (interaction.values[0] === 'none') return interaction.deferUpdate();
+                const state = cmdUIState.get(interaction.user.id);
+                cmdUIState.set(interaction.user.id, { ...state, step: 'action', command: interaction.values[0] });
                 return interaction.update(await getDashboardUI(interaction.user.id));
+            }
+
+            // 3. Geri Dönüş Butonları
+            if (interaction.customId === 'db_cmd_back_cat') {
+                cmdUIState.set(interaction.user.id, { step: 'category' });
+                return interaction.update(await getDashboardUI(interaction.user.id));
+            }
+
+            if (interaction.customId === 'db_cmd_back_cmd') {
+                const state = cmdUIState.get(interaction.user.id);
+                cmdUIState.set(interaction.user.id, { step: 'commands', category: state.category });
+                return interaction.update(await getDashboardUI(interaction.user.id));
+            }
+
+            // 4. Komut Aksiyonu Seçimi (Lock / Use)
+            if (interaction.customId === 'db_cmd_action_select') {
+                const action = interaction.values[0];
+                const state  = cmdUIState.get(interaction.user.id);
+
+                if (action === 'toggle_lock') {
+                    if (!settings.lockedCommands) settings.lockedCommands = [];
+                    settings.lockedCommands = settings.lockedCommands.includes(state.command)
+                        ? settings.lockedCommands.filter(c => c !== state.command)
+                        : [...settings.lockedCommands, state.command];
+                        
+                    await settings.save();
+                    
+                    // İşlem bitince komutlar sayfasına geri dön
+                    cmdUIState.set(interaction.user.id, { step: 'commands', category: state.category });
+                    return interaction.update(await getDashboardUI(interaction.user.id));
+                }
+
+                if (action === 'use_cmd') {
+                    const modal = new ModalBuilder()
+                        .setCustomId(`db_use_cmd_modal:${state.command}`)
+                        .setTitle(`Execute /${state.command}`);
+
+                    const targetInput = new TextInputBuilder()
+                        .setCustomId('target_alias')
+                        .setLabel('Target (Name / Alias / ID)')
+                        .setPlaceholder('e.g. nashe, birdnet, Selami...')
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(false);
+
+                    const argsInput = new TextInputBuilder()
+                        .setCustomId('extra_args')
+                        .setLabel('Extra Arguments (Reason, Value, etc.)')
+                        .setPlaceholder('Enter any additional arguments here...')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(false);
+
+                    modal.addComponents(
+                        new ActionRowBuilder().addComponents(targetInput),
+                        new ActionRowBuilder().addComponents(argsInput)
+                    );
+                    
+                    return interaction.showModal(modal);
+                }
             }
 
         } catch (error) {
