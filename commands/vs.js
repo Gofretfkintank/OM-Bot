@@ -1,36 +1,13 @@
 //--------------------------------
 // IMPORTS
 //--------------------------------
-const { SlashCommandBuilder, AttachmentBuilder, EmbedBuilder } = require('discord.js');
-const Driver = require('../models/Driver');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const DriverRating = require('../models/DriverRating');
 const axios = require('axios');
 
 //--------------------------------
-// RATING CALCULATION
+// RATING COLOR
 //--------------------------------
-function calculateDriverRating(stats) {
-    const totalRaces = stats.races || 0;
-    if (totalRaces === 0) return 0;
-
-    const winRatio    = (stats.wins    || 0) / totalRaces;
-    const podiumRatio = (stats.podiums || 0) / totalRaces;
-    const poleRatio   = (stats.poles   || 0) / totalRaces;
-    const dnfRatio    = (stats.dnf     || 0) / totalRaces;
-
-    const titleBonus = Math.min(((stats.wdc || 0) + (stats.wcc || 0)) * 3, 15);
-    const awardBonus = Math.min((stats.doty || 0) * 2, 10);
-
-    const score =
-        winRatio    * 40 +
-        podiumRatio * 25 +
-        poleRatio   * 10 +
-        (1 - dnfRatio) * 10 +
-        titleBonus +
-        awardBonus;
-
-    return Math.min(Math.round((score / 110) * 100), 100);
-}
-
 function getRatingColor(rating) {
     if (rating >= 75) return '#00E676';
     if (rating >= 50) return '#FFEB3B';
@@ -57,155 +34,122 @@ module.exports = {
         if (user1.id === user2.id)
             return interaction.editReply('❌ Please select two different drivers.');
 
-        const [driverData1, driverData2] = await Promise.all([
-            Driver.findOne({ userId: user1.id }),
-            Driver.findOne({ userId: user2.id }),
+        const [dr1, dr2] = await Promise.all([
+            DriverRating.findOne({ userId: user1.id }),
+            DriverRating.findOne({ userId: user2.id }),
         ]);
 
-        if (!driverData1 || !driverData2)
-            return interaction.editReply('❌ One or both drivers were not found in the database.');
+        if (!dr1 || !dr2)
+            return interaction.editReply('❌ One or both drivers have not been rated yet. Admins must rate drivers via the web panel first.');
 
-        const rating1 = calculateDriverRating(driverData1);
-        const rating2 = calculateDriverRating(driverData2);
+        if (dr1.ratedBy === 0 || dr2.ratedBy === 0)
+            return interaction.editReply('❌ One or both drivers have no ratings submitted yet.');
 
-        const color1 = getRatingColor(rating1);
-        const color2 = getRatingColor(rating2);
+        const rating1 = dr1.avg.overall;
+        const rating2 = dr2.avg.overall;
+        const color1  = getRatingColor(rating1);
+        const color2  = getRatingColor(rating2);
 
-        // ------------------------------------------------
-        // COOKIE API — correct payload format per docs
-        // ------------------------------------------------
+        //--------------------------------
+        // COOKIE API CARD
+        //--------------------------------
         const requestBody = {
             card: {
-                height: "260",
+                height: "300",
                 width: "700",
                 bg: "#0d0d1a",
                 bg_type: "color"
             },
             elements: [
-                // ---- Divider line (thin rect via image trick not supported — use colored text as separator) ----
-
                 // ---- Left name ----
                 {
-                    id: "left-name",
-                    type: "text",
+                    id: "left-name", type: "text",
                     text: user1.username.toUpperCase(),
-                    text_size: "22",
-                    font: "Roboto",
-                    color: "#ffffff",
-                    transparency: "100",
-                    layer: "2",
-                    position: { x: 10, y: 20 },
-                    size: { width: 300, height: 40 }
+                    text_size: "22", font: "Roboto", color: "#ffffff",
+                    transparency: "100", layer: "2",
+                    position: { x: 10, y: 20 }, size: { width: 300, height: 40 }
                 },
                 // ---- Right name ----
                 {
-                    id: "right-name",
-                    type: "text",
+                    id: "right-name", type: "text",
                     text: user2.username.toUpperCase(),
-                    text_size: "22",
-                    font: "Roboto",
-                    color: "#ffffff",
-                    transparency: "100",
-                    layer: "2",
-                    position: { x: 390, y: 20 },
-                    size: { width: 300, height: 40 }
+                    text_size: "22", font: "Roboto", color: "#ffffff",
+                    transparency: "100", layer: "2",
+                    position: { x: 390, y: 20 }, size: { width: 300, height: 40 }
                 },
                 // ---- VS label ----
                 {
-                    id: "vs-label",
-                    type: "text",
-                    text: "VS",
-                    text_size: "28",
-                    font: "Roboto",
-                    color: "#aaaaaa",
-                    transparency: "100",
-                    layer: "2",
-                    position: { x: 320, y: 15 },
-                    size: { width: 60, height: 50 }
+                    id: "vs-label", type: "text", text: "VS",
+                    text_size: "28", font: "Roboto", color: "#aaaaaa",
+                    transparency: "100", layer: "2",
+                    position: { x: 320, y: 15 }, size: { width: 60, height: 50 }
                 },
-                // ---- Left rating ----
+                // ---- Left overall rating ----
                 {
-                    id: "left-rating",
-                    type: "text",
+                    id: "left-rating", type: "text",
                     text: rating1.toString(),
-                    text_size: "60",
-                    font: "Roboto",
-                    color: color1,
-                    transparency: "100",
-                    layer: "2",
-                    position: { x: 10, y: 80 },
-                    size: { width: 300, height: 80 }
+                    text_size: "60", font: "Roboto", color: color1,
+                    transparency: "100", layer: "2",
+                    position: { x: 10, y: 70 }, size: { width: 300, height: 80 }
                 },
-                // ---- Right rating ----
+                // ---- Right overall rating ----
                 {
-                    id: "right-rating",
-                    type: "text",
+                    id: "right-rating", type: "text",
                     text: rating2.toString(),
-                    text_size: "60",
-                    font: "Roboto",
-                    color: color2,
-                    transparency: "100",
-                    layer: "2",
-                    position: { x: 390, y: 80 },
-                    size: { width: 300, height: 80 }
+                    text_size: "60", font: "Roboto", color: color2,
+                    transparency: "100", layer: "2",
+                    position: { x: 390, y: 70 }, size: { width: 300, height: 80 }
                 },
-                // ---- Left stats ----
+                // ---- Left criteria ----
                 {
-                    id: "left-stats",
-                    type: "text",
-                    text: `Races: ${driverData1.races}  Wins: ${driverData1.wins}  Podiums: ${driverData1.podiums}`,
-                    text_size: "14",
-                    font: "Roboto",
-                    color: "#aaaaaa",
-                    transparency: "100",
-                    layer: "2",
-                    position: { x: 10, y: 175 },
-                    size: { width: 330, height: 30 }
+                    id: "left-stats", type: "text",
+                    text: `PAC ${dr1.avg.pace}  CRA ${dr1.avg.racecraft}  DEF ${dr1.avg.defending}`,
+                    text_size: "14", font: "Roboto", color: "#aaaaaa",
+                    transparency: "100", layer: "2",
+                    position: { x: 10, y: 165 }, size: { width: 330, height: 30 }
                 },
-                // ---- Right stats ----
                 {
-                    id: "right-stats",
-                    type: "text",
-                    text: `Races: ${driverData2.races}  Wins: ${driverData2.wins}  Podiums: ${driverData2.podiums}`,
-                    text_size: "14",
-                    font: "Roboto",
-                    color: "#aaaaaa",
-                    transparency: "100",
-                    layer: "2",
-                    position: { x: 390, y: 175 },
-                    size: { width: 330, height: 30 }
+                    id: "left-extra", type: "text",
+                    text: `OVT ${dr1.avg.overtaking}  CON ${dr1.avg.consistency}  EXP ${dr1.avg.experience}`,
+                    text_size: "14", font: "Roboto", color: "#aaaaaa",
+                    transparency: "100", layer: "2",
+                    position: { x: 10, y: 200 }, size: { width: 330, height: 30 }
                 },
-                // ---- Left poles/DNF ----
+                // ---- Left rated by ----
                 {
-                    id: "left-extra",
-                    type: "text",
-                    text: `Poles: ${driverData1.poles}  DNF: ${driverData1.dnf}  WDC: ${driverData1.wdc}`,
-                    text_size: "14",
-                    font: "Roboto",
-                    color: "#aaaaaa",
-                    transparency: "100",
-                    layer: "2",
-                    position: { x: 10, y: 210 },
-                    size: { width: 330, height: 30 }
+                    id: "left-ratedby", type: "text",
+                    text: `Rated by ${dr1.ratedBy} admin${dr1.ratedBy !== 1 ? 's' : ''}`,
+                    text_size: "12", font: "Roboto", color: "#555555",
+                    transparency: "100", layer: "2",
+                    position: { x: 10, y: 255 }, size: { width: 300, height: 25 }
                 },
-                // ---- Right poles/DNF ----
+                // ---- Right criteria ----
                 {
-                    id: "right-extra",
-                    type: "text",
-                    text: `Poles: ${driverData2.poles}  DNF: ${driverData2.dnf}  WDC: ${driverData2.wdc}`,
-                    text_size: "14",
-                    font: "Roboto",
-                    color: "#aaaaaa",
-                    transparency: "100",
-                    layer: "2",
-                    position: { x: 390, y: 210 },
-                    size: { width: 330, height: 30 }
+                    id: "right-stats", type: "text",
+                    text: `PAC ${dr2.avg.pace}  CRA ${dr2.avg.racecraft}  DEF ${dr2.avg.defending}`,
+                    text_size: "14", font: "Roboto", color: "#aaaaaa",
+                    transparency: "100", layer: "2",
+                    position: { x: 390, y: 165 }, size: { width: 330, height: 30 }
+                },
+                {
+                    id: "right-extra", type: "text",
+                    text: `OVT ${dr2.avg.overtaking}  CON ${dr2.avg.consistency}  EXP ${dr2.avg.experience}`,
+                    text_size: "14", font: "Roboto", color: "#aaaaaa",
+                    transparency: "100", layer: "2",
+                    position: { x: 390, y: 200 }, size: { width: 330, height: 30 }
+                },
+                // ---- Right rated by ----
+                {
+                    id: "right-ratedby", type: "text",
+                    text: `Rated by ${dr2.ratedBy} admin${dr2.ratedBy !== 1 ? 's' : ''}`,
+                    text_size: "12", font: "Roboto", color: "#555555",
+                    transparency: "100", layer: "2",
+                    position: { x: 390, y: 255 }, size: { width: 300, height: 25 }
                 },
             ]
         };
 
         try {
-            // Cookie API returns a JSON with a "url" field — NOT a binary image
             const apiResponse = await axios.post(
                 'https://api.cookie-api.com/api/cards/card-builder/build',
                 requestBody,
@@ -214,7 +158,6 @@ module.exports = {
                         'Authorization': process.env.COOKIE_API_KEY,
                         'Content-Type': 'application/json'
                     }
-                    // No responseType: 'arraybuffer' — we need JSON back
                 }
             );
 
@@ -225,7 +168,6 @@ module.exports = {
                 return interaction.editReply(`❌ Card generation failed: ${result.errors?.[0]?.message || 'Unknown error'}`);
             }
 
-            // API returns an image URL — send it as an embed
             const embed = new EmbedBuilder()
                 .setTitle(`${user1.username} vs ${user2.username}`)
                 .setImage(result.url)
