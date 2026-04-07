@@ -1,6 +1,7 @@
 // commands/register.js
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const Driver = require('../models/Driver');
+const DriverRating = require('../models/DriverRating');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -22,8 +23,11 @@ module.exports = {
                 });
             }
 
-            // İlk kez → kayıt + yeşil embed
-            await Driver.create({ userId: user.id });
+            // Driver + DriverRating aynı anda oluştur
+            await Promise.all([
+                Driver.create({ userId: user.id }),
+                DriverRating.create({ userId: user.id, username: user.username })
+            ]);
 
             const embed = new EmbedBuilder()
                 .setColor('#00FF7F')
