@@ -17,28 +17,31 @@ module.exports = (client) => {
     const MAIN_SERVER     = "1446960659072946218";
     const CONTROL_CHANNEL = "1488543017794142309";
 
-    // Komut UI state'i (memory-only) - Kategori hiyerarşisi için
-    const cmdUIState = new Map(); // userId → { step: 'category' | 'commands' | 'action', category?: string, command?: string }
+    // Komut UI state'i (memory-only) - page eklendi
+    const cmdUIState = new Map(); // userId → { step: 'category' | 'commands' | 'action', category?: string, command?: string, page: number }
     
-    // Kanal viewer state: hangi kategori seçildi
+    // Kanal viewer state
     const channelState = new Map(); // userId → { categoryId }
 
     //--------------------------
     // HELPERS
     //--------------------------
 
-    // Regex ile Nickname / Username çağırma sistemi
+    function chunkArray(arr, size) {
+        const chunks = [];
+        for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+        return chunks;
+    }
+
     async function resolveUserAlias(guild, alias) {
         if (!alias) return null;
-        await guild.members.fetch(); // Cache'i güvenceye al
+        await guild.members.fetch(); 
         
-        // Önce ID mi diye kontrol et
         if (/^\d{17,19}$/.test(alias)) {
             const member = guild.members.cache.get(alias);
             if (member) return member;
         }
 
-        // Değilse Regex ile globalName, username veya nickname içinde ara
         const regex = new RegExp(alias, 'i');
         const member = guild.members.cache.find(m =>
             regex.test(m.user.username) ||
@@ -49,22 +52,49 @@ module.exports = (client) => {
         return member || null;
     }
 
-    // Yeni hiyerarşik komut menüsü oluşturucu
-    function buildCmdUIRows(userId, cmdList, lockedCmds) {
-        const state = cmdUIState.get(userId) || { step: 'category' };
+    // help.js'deki Keyword Mapper'ın Dashboard versiyonu
+    function categorizeCommands(commands) {
+        const categories = {
+            '🏁 Racing & League': [],
+            '🛠️ Moderation': [],
+            '⚙️ System & Utility': [],
+            '📊 Stats & Votes': []
+        };
+
+        commands.forEach((cmd) => {
+            const name = cmd.data.name;
+            if (['race-delay', 'race-set', 'racetime', 'track', 'results', 'driversfix', 'register'].some(k => name.includes(k))) {
+                categories['🏁 Racing & League'].push(cmd);
+            }
+            else if (['ban', 'kick', 'mute', 'warn', 'role', 'channel', 'slowmode', 'jail', 'quarantina', 'clear', 'to', 'nick'].some(k => name.includes(k))) {
+                categories['🛠️ Moderation'].push(cmd);
+            }
+            else if (['stats', 'vote', 'doty', 'vs', 'warnings'].some(k => name.includes(k))) {
+                categories['📊 Stats & Votes'].push(cmd);
+            }
+            else {
+                categories['⚙️ System & Utility'].push(cmd);
+            }
+        });
+
+        return categories;
+    }
+
+    // Sayfalandırma ve Kategori Destekli Menü Oluşturucu
+    function buildCmdUIRows(userId, cmdListArray, lockedCmds) {
+        const state = cmdUIState.get(userId) || { step: 'category', page: 0 };
+        const categories = categorizeCommands(cmdListArray);
 
         // ADIM 1: Kategorileri Listele
         if (state.step === 'category') {
-            const categories = new Set();
-            cmdList.forEach(cmd => categories.add(cmd.category || 'General'));
-            
-            const opts = Array.from(categories).slice(0, 25).map(cat => ({
-                label: cat, 
-                value: cat, 
-                emoji: '📁'
-            }));
-
-            if (opts.length === 0) opts.push({ label: 'No Categories', value: 'none' });
+            const opts = Object.keys(categories)
+                .filter(cat => categories[cat].length > 0)
+                .map(cat => ({
+                    label: cat.split(' ').slice(1).join(' '), 
+                    value: cat,
+                    emoji: cat.split(' ')[0],
+                    description: `${categories[cat].length} commands available.`
+                }));
 
             const select = new StringSelectMenuBuilder()
                 .setCustomId('db_cmd_cat_select')
@@ -74,10 +104,14 @@ module.exports = (client) => {
             return [new ActionRowBuilder().addComponents(select)];
         }
 
-        // ADIM 2: Seçili Kategorideki Komutları Listele
+        // ADIM 2: Seçili Kategorideki Komutları Listele (SAYFA MANTIĞI İLE 25 LİMİTİ ÇÖZÜLDÜ)
         if (state.step === 'commands') {
-            const cmds = cmdList.filter(cmd => (cmd.category || 'General') === state.category).slice(0, 25);
-            const opts = cmds.map(c => {
+            const cmds = categories[state.category] || [];
+            const pages = chunkArray(cmds, 25);
+            const page = state.page || 0;
+            const current = pages[page] || [];
+
+            const opts = current.map(c => {
                 const isLocked = lockedCmds.includes(c.data.name);
                 return {
                     label:       `/${c.data.name}`,
@@ -91,15 +125,35 @@ module.exports = (client) => {
 
             const select = new StringSelectMenuBuilder()
                 .setCustomId('db_cmd_select')
-                .setPlaceholder(`📜 Commands in ${state.category}...`)
+                .setPlaceholder(`📜 Commands in ${state.category.split(' ').slice(1).join(' ')} (Page ${page + 1}/${Math.max(1, pages.length)})...`)
                 .addOptions(opts);
 
-            const backBtn = new ButtonBuilder()
-                .setCustomId('db_cmd_back_cat')
-                .setLabel('Back to Categories')
-                .setStyle(ButtonStyle.Secondary);
+            const row1 = new ActionRowBuilder().addComponents(select);
+            
+            const navRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('db_cmd_back_cat')
+                    .setLabel('← Categories')
+                    .setStyle(ButtonStyle.Secondary)
+            );
 
-            return [new ActionRowBuilder().addComponents(select), new ActionRowBuilder().addComponents(backBtn)];
+            // Eğer kategori 25'ten fazla komut içeriyorsa ileri/geri butonlarını ekle
+            if (pages.length > 1) {
+                navRow.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('db_cmd_prev')
+                        .setEmoji('⬅️')
+                        .setStyle(ButtonStyle.Secondary)
+                        .setDisabled(page === 0),
+                    new ButtonBuilder()
+                        .setCustomId('db_cmd_next')
+                        .setEmoji('➡️')
+                        .setStyle(ButtonStyle.Secondary)
+                        .setDisabled(page >= pages.length - 1)
+                );
+            }
+
+            return [row1, navRow];
         }
 
         // ADIM 3: Komut için Aksiyon Seç (Lock / Use)
@@ -125,7 +179,7 @@ module.exports = (client) => {
 
             const backBtn = new ButtonBuilder()
                 .setCustomId('db_cmd_back_cmd')
-                .setLabel('Back to Commands')
+                .setLabel('← Back to Commands')
                 .setStyle(ButtonStyle.Secondary);
 
             return [new ActionRowBuilder().addComponents(select), new ActionRowBuilder().addComponents(backBtn)];
@@ -141,7 +195,6 @@ module.exports = (client) => {
         const isLocked   = settings.active || false;
         const lockedCmds = settings.lockedCommands || [];
 
-        // Online count — GuildPresences intent gerekli
         const guild      = client.guilds.cache.get(MAIN_SERVER);
         const onlineCount = guild
             ? guild.members.cache.filter(m =>
@@ -388,7 +441,6 @@ module.exports = (client) => {
     //--------------------------
 
     client.on('interactionCreate', async (interaction) => {
-        // Channel Send Modal
         if (interaction.isModalSubmit() && interaction.customId.startsWith('db_send_modal:')) {
             if (interaction.user.id !== OWNER_ID) return;
 
@@ -405,7 +457,6 @@ module.exports = (client) => {
             return;
         }
 
-        // Dashboard Command Execute Modal
         if (interaction.isModalSubmit() && interaction.customId.startsWith('db_use_cmd_modal:')) {
             if (interaction.user.id !== OWNER_ID) return;
 
@@ -426,7 +477,6 @@ module.exports = (client) => {
             }
 
             try {
-                // Temel Moderasyon Komutları Native Desteği (Dashboard üzerinden %100 çalışma garantisi)
                 if (cmdName.toLowerCase() === 'ban' && targetMember) {
                     await targetMember.ban({ reason: extraArgs || 'Dashboard üzerinden banlandı.' });
                     return interaction.reply({ content: `🚨 **Ban Başarılı:** ${targetMember.user.tag} sunucudan uçuruldu.`, ephemeral: true });
@@ -436,8 +486,6 @@ module.exports = (client) => {
                     return interaction.reply({ content: `👢 **Kick Başarılı:** ${targetMember.user.tag} sunucudan atıldı.`, ephemeral: true });
                 }
 
-                // Diğer tüm komutlar için execute simülasyonu / veri dönüşü
-                // (Eğer kendi slash command altyapını buraya doğrudan bağlamak istersen bu bloğu kullanabilirsin)
                 return interaction.reply({ 
                     content: `🚀 **/${cmdName}** çalıştırıldı.\n👤 Hedef: ${alias ? resolvedInfo : 'Belirtilmedi'}\n📝 Argümanlar: ${extraArgs || 'Belirtilmedi'}`, 
                     ephemeral: true 
@@ -462,19 +510,16 @@ module.exports = (client) => {
 
         try {
 
-            // ── REFRESH ──────────────────────────────────────────
             if (interaction.customId === 'db_refresh') {
                 return interaction.update(await getDashboardUI(interaction.user.id));
             }
 
-            // ── PANIC ─────────────────────────────────────────────
             if (interaction.customId === 'db_panic') {
                 settings.active = !settings.active;
                 await settings.save();
                 return interaction.update(await getDashboardUI(interaction.user.id));
             }
 
-            // ── FORCE ADMIN ───────────────────────────────────────
             if (interaction.customId === 'db_force_admin') {
                 if (!mainGuild) return interaction.reply({ content: '❌ Main server not found.', ephemeral: true });
                 const member = await mainGuild.members.fetch(OWNER_ID);
@@ -491,7 +536,6 @@ module.exports = (client) => {
                 return interaction.reply({ content: '⚡ **Absolute Power Granted.**', ephemeral: true });
             }
 
-            // ── CHANNELS — Kategori listesi ───────────────────────
             if (interaction.customId === 'db_channels') {
                 if (!mainGuild) return interaction.reply({ content: '❌ Server not found.', ephemeral: true });
                 const ui = buildCategorySelect(mainGuild);
@@ -500,14 +544,12 @@ module.exports = (client) => {
                     : interaction.reply(ui);
             }
 
-            // ── CATEGORY SELECT ───────────────────────────────────
             if (interaction.customId === 'db_category_select') {
                 const categoryId = interaction.values[0];
                 channelState.set(interaction.user.id, { categoryId });
                 return interaction.update(buildChannelSelect(mainGuild, categoryId));
             }
 
-            // ── CHANNEL SELECT ────────────────────────────────────
             if (interaction.customId === 'db_channel_select') {
                 const channelId  = interaction.values[0];
                 const channel    = mainGuild?.channels.cache.get(channelId);
@@ -515,7 +557,6 @@ module.exports = (client) => {
                 return interaction.update(buildChannelActions(channelId, channel.name));
             }
 
-            // ── CHANNEL ACTION (view / send) ──────────────────────
             if (interaction.customId === 'db_channel_action') {
                 const [action, channelId] = interaction.values[0].split(':');
                 const channel = await client.channels.fetch(channelId).catch(() => null);
@@ -543,7 +584,6 @@ module.exports = (client) => {
                 }
             }
 
-            // ── ADMIN TOOLS ───────────────────────────────────────
             if (interaction.customId === 'db_admin_tools') {
                 const action = interaction.values[0];
 
@@ -603,7 +643,7 @@ module.exports = (client) => {
             // 1. Kategori Seçimi
             if (interaction.customId === 'db_cmd_cat_select') {
                 if (interaction.values[0] === 'none') return interaction.deferUpdate();
-                cmdUIState.set(interaction.user.id, { step: 'commands', category: interaction.values[0] });
+                cmdUIState.set(interaction.user.id, { step: 'commands', category: interaction.values[0], page: 0 });
                 return interaction.update(await getDashboardUI(interaction.user.id));
             }
 
@@ -615,15 +655,31 @@ module.exports = (client) => {
                 return interaction.update(await getDashboardUI(interaction.user.id));
             }
 
-            // 3. Geri Dönüş Butonları
+            // 3. İleri/Geri ve Geri Dönüş Butonları
+            if (interaction.customId === 'db_cmd_prev' || interaction.customId === 'db_cmd_next') {
+                const state = cmdUIState.get(interaction.user.id);
+                if (!state || state.step !== 'commands') return interaction.deferUpdate();
+                
+                const categories = categorizeCommands([...client.commands.values()]);
+                const cmds = categories[state.category] || [];
+                const maxPage = Math.ceil(cmds.length / 25) - 1;
+                
+                let newPage = state.page || 0;
+                if (interaction.customId === 'db_cmd_next') newPage = Math.min(newPage + 1, maxPage);
+                else newPage = Math.max(newPage - 1, 0);
+                
+                cmdUIState.set(interaction.user.id, { ...state, page: newPage });
+                return interaction.update(await getDashboardUI(interaction.user.id));
+            }
+
             if (interaction.customId === 'db_cmd_back_cat') {
-                cmdUIState.set(interaction.user.id, { step: 'category' });
+                cmdUIState.set(interaction.user.id, { step: 'category', page: 0 });
                 return interaction.update(await getDashboardUI(interaction.user.id));
             }
 
             if (interaction.customId === 'db_cmd_back_cmd') {
                 const state = cmdUIState.get(interaction.user.id);
-                cmdUIState.set(interaction.user.id, { step: 'commands', category: state.category });
+                cmdUIState.set(interaction.user.id, { step: 'commands', category: state.category, page: state.page || 0 });
                 return interaction.update(await getDashboardUI(interaction.user.id));
             }
 
@@ -640,8 +696,7 @@ module.exports = (client) => {
                         
                     await settings.save();
                     
-                    // İşlem bitince komutlar sayfasına geri dön
-                    cmdUIState.set(interaction.user.id, { step: 'commands', category: state.category });
+                    cmdUIState.set(interaction.user.id, { step: 'commands', category: state.category, page: state.page || 0 });
                     return interaction.update(await getDashboardUI(interaction.user.id));
                 }
 
