@@ -1,7 +1,8 @@
 module.exports = (client) => {
 
     const TARGET_USER_ID = "837688603739816046";
-    const PROTECTED_ROLE_NAME = "THE N1GG3REST N1GG3R OFF ALL TIME";
+
+    const PROTECTED_ROLE_NAME = "KORUNAN_ROL"; 
     const PROTECTED_ROLE_COLOR = 0x633d13;
 
     let activeRoleId = null;
@@ -35,7 +36,7 @@ module.exports = (client) => {
                 await m.roles.remove(activeRoleId);
             }
 
-            console.log("🟢 RoleGuard: Koruma aktif");
+            console.log("🟢 RoleGuard: Rol koruması aktif");
         } catch (err) {
             console.error("RoleGuard Startup Error:", err);
         }
@@ -58,22 +59,38 @@ module.exports = (client) => {
     });
 
     //--------------------------------
-    // MEMBER UPDATE
+    // MEMBER UPDATE (Rol Koruması + Sadece Hedef Kişiye Özel İsim Kilidi)
     //--------------------------------
     client.on('guildMemberUpdate', async (oldMember, newMember) => {
-        if (!activeRoleId) return;
+        
+        // --- 1. ROL KORUMASI ---
+        if (activeRoleId) {
+            const hasRole = newMember.roles.cache.has(activeRoleId);
+            const hadRole = oldMember.roles.cache.has(activeRoleId);
 
-        const hasRole = newMember.roles.cache.has(activeRoleId);
-        const hadRole = oldMember.roles.cache.has(activeRoleId);
+            // Başkasına verilirse al
+            if (newMember.id !== TARGET_USER_ID && hasRole) {
+                await newMember.roles.remove(activeRoleId);
+            }
 
-        // Başkasına verilirse al
-        if (newMember.id !== TARGET_USER_ID && hasRole) {
-            await newMember.roles.remove(activeRoleId);
+            // Sahibinden alınırsa geri ver
+            if (newMember.id === TARGET_USER_ID && hadRole && !hasRole) {
+                await newMember.roles.add(activeRoleId);
+            }
         }
 
-        // Sahibinden alınırsa geri ver
-        if (newMember.id === TARGET_USER_ID && hadRole && !hasRole) {
-            await newMember.roles.add(activeRoleId);
+        // --- 2. BİRD'ÜN İSMİNİ KİLİTLEME ---
+        // Eğer güncellenen kişi hedef ID ise ve ismi (nickname) değiştiyse
+        if (newMember.id === TARGET_USER_ID) {
+            if (oldMember.nickname !== newMember.nickname) {
+                try {
+                    // İşlemi anında iptal edip bir önceki ismine geri döndürüyoruz
+                    await newMember.setNickname(oldMember.nickname, "RoleGuard: Bu kullanıcının ismi kilitlidir.");
+                    console.log(`🛡️ RoleGuard: ${newMember.user.tag} isimli kullanıcının adı değiştirilmeye çalışıldı. Engel olundu.`);
+                } catch (err) {
+                    console.error("RoleGuard İsim Kilidi Hatası (Botun yetkisi altta kalıyor olabilir):", err);
+                }
+            }
         }
     });
 
