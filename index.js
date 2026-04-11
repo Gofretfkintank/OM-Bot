@@ -378,7 +378,7 @@ client.on('interactionCreate', async interaction => {
     // TEAMRADIO BUTTON SYSTEM
     //--------------------------
 
-    else if (interaction.isButton() && (interaction.customId === 'close_ticket' || interaction.customId === 'reopen_ticket')) {
+    else if (interaction.isButton() && interaction.customId.startsWith('radio_')) {
         const command = client.commands.get('teamradio');
         if (command && command.buttonHandler) {
             await command.buttonHandler(interaction);
