@@ -369,6 +369,17 @@ client.on('interactionCreate', async interaction => {
             console.error('VOTING BUTTON ERROR:', err);
         }
     }
+
+    //--------------------------
+    // TEAMRADIO BUTTON SYSTEM
+    //--------------------------
+
+    else if (interaction.isButton() && (interaction.customId === 'close_ticket' || interaction.customId === 'reopen_ticket')) {
+        const command = client.commands.get('teamradio');
+        if (command && command.buttonHandler) {
+            await command.buttonHandler(interaction);
+        }
+    }
 });
 
 //--------------------------
