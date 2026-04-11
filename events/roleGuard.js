@@ -1,7 +1,6 @@
 module.exports = (client) => {
 
     const TARGET_USER_ID = "837688603739816046";
-
     const PROTECTED_ROLE_NAME = "KORUNAN_ROL"; 
     const PROTECTED_ROLE_COLOR = 0x633d13;
 
