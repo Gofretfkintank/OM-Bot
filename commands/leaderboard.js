@@ -1,5 +1,5 @@
 //--------------------------
-// LEADERBOARD KOMUTU
+// LEADERBOARD COMMAND
 //--------------------------
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const DriverRating = require('../models/DriverRating');
@@ -7,53 +7,61 @@ const DriverRating = require('../models/DriverRating');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('leaderboard')
-        .setDescription('Pilotların overall puanına göre sıralamasını gösterir'),
+        .setDescription('Shows the driver rankings based on overall rating'),
 
     async execute(interaction) {
 
         //--------------------------
-        // VERİLERİ ÇEK
+        // FETCH DATA
         //--------------------------
         const drivers = await DriverRating.find();
 
         if (!drivers.length) {
             return interaction.reply({
-                content: 'Hiç veri bulunamadı.',
+                content: 'No driver data found.',
                 ephemeral: true
             });
         }
 
         //--------------------------
-        // SIRALA (OVERALL)
+        // SORT BY OVERALL
         //--------------------------
         const sorted = drivers.sort((a, b) => b.avg.overall - a.avg.overall);
 
         //--------------------------
-        // TOP 10 AL
+        // GET TOP 10
         //--------------------------
         const top = sorted.slice(0, 10);
 
         //--------------------------
-        // METİN OLUŞTUR
+        // BUILD DESCRIPTION
         //--------------------------
-        let desc = '';
+        let description = '';
 
         top.forEach((driver, index) => {
-            desc += `**${index + 1}.** ${driver.username || 'Bilinmeyen'} - **${driver.avg.overall}**\n`;
+
+            let position;
+
+            if (index === 0) position = '🥇';
+            else if (index === 1) position = '🥈';
+            else if (index === 2) position = '🥉';
+            else position = `**${index + 1}.**`;
+
+            description += `${position} ${driver.name || 'Unknown'} - **${driver.avg.overall}**\n`;
         });
 
         //--------------------------
-        // EMBED
+        // CREATE EMBED
         //--------------------------
         const embed = new EmbedBuilder()
             .setTitle('🏆 Driver Leaderboard')
-            .setDescription(desc || 'Liste boş.')
+            .setDescription(description || 'Leaderboard is empty.')
             .setColor('Red')
-            .setFooter({ text: `Toplam Pilot: ${drivers.length}` })
+            .setFooter({ text: `Total Drivers: ${drivers.length}` })
             .setTimestamp();
 
         //--------------------------
-        // GÖNDER
+        // SEND RESPONSE
         //--------------------------
         await interaction.reply({ embeds: [embed] });
     }
