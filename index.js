@@ -30,6 +30,7 @@ mongoose.connect(process.env.MONGO_URI)
 const Driver = require('./models/Driver');
 const DotyVote = require('./models/DotyVote');
 const Maintenance = require('./models/Maintenance');
+const { onStartup: teamRadioStartup } = require('./commands/teamradio');
 
 //--------------------------
 // CLIENT
@@ -107,6 +108,9 @@ function hashCommand(cmd) {
 client.once('ready', async () => {
 
     console.log(`[ONLINE] ${client.user.tag}`);
+
+    // TeamRadio restart-safe scheduler
+    await teamRadioStartup(client);
 
     try {
         await client.application.commands.set([]);
