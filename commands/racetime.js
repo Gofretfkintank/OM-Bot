@@ -278,6 +278,56 @@ const COUNTRY_TIMEZONES = {
 };
 
 //--------------------------------
+// YARDIMCI: Ülke/timezone inputundan IANA timezone çöz
+// Hem COUNTRY_TIMEZONES map'ini hem IANA isimlerini destekler
+//--------------------------------
+function resolveTimezone(input) {
+    const lower = input.trim().toLowerCase();
+
+    // 1) Direkt ülke map'i
+    if (COUNTRY_TIMEZONES[lower]) return COUNTRY_TIMEZONES[lower];
+
+    // 2) Partial ülke eşleşmesi
+    const countryMatch = Object.keys(COUNTRY_TIMEZONES)
+        .find(k => k.includes(lower) || lower.includes(k));
+    if (countryMatch) return COUNTRY_TIMEZONES[countryMatch];
+
+    // 3) IANA timezone adı olarak dene (örn. "Europe/Istanbul", "UTC+3", "EST" vb.)
+    //    Intl.DateTimeFormat ile doğrula
+    const ianaCandidate = input.trim(); // orijinal büyük/küçük harfleri koru
+    try {
+        Intl.DateTimeFormat('en-US', { timeZone: ianaCandidate });
+        return ianaCandidate; // geçerliyse direkt kullan
+    } catch {
+        // geçersiz IANA adı
+    }
+
+    // 4) UTC±X formatı (örn. "utc+3", "gmt-5", "+05:30")
+    const utcMatch = lower.match(/^(?:utc|gmt)?([+-]\d{1,2}(?::\d{2})?)$/);
+    if (utcMatch) {
+        // Intl.DateTimeFormat UTC offset'i direkt desteklemez,
+        // Etc/GMT±X ile yaklaşık map'le (dakika offsetleri desteklenmez)
+        const offsetStr = utcMatch[1];
+        const hourMatch = offsetStr.match(/([+-])(\d{1,2})(?::(\d{2}))?/);
+        if (hourMatch) {
+            const sign = hourMatch[1];
+            const hours = parseInt(hourMatch[2], 10);
+            // Etc/GMT işareti ters çalışır (Etc/GMT+5 = UTC-5)
+            const etcSign = sign === '+' ? '-' : '+';
+            const etcName = `Etc/GMT${etcSign}${hours}`;
+            try {
+                Intl.DateTimeFormat('en-US', { timeZone: etcName });
+                return etcName;
+            } catch {
+                // geçersiz
+            }
+        }
+    }
+
+    return null;
+}
+
+//--------------------------------
 // YARDIMCI: Belirli bir timezone'da saati formatla
 //--------------------------------
 function getTimeInZone(utcHour, utcMinute, timezone) {
@@ -346,23 +396,24 @@ module.exports = {
                 .setRequired(false)
                 .setMinValue(0)
                 .setMaxValue(59)
+        )
+        .addStringOption(opt =>
+            opt.setName('to_tz')
+                .setDescription('Also show time in another timezone (country name, IANA zone, or UTC offset e.g. UTC+3)')
+                .setRequired(false)
         ),
 
     async execute(interaction) {
         const countryInput = interaction.options.getString('country').trim().toLowerCase();
         const pktHour = interaction.options.getInteger('hour') ?? 18;
         const pktMinute = interaction.options.getInteger('minute') ?? 0;
+        const toTzInput = interaction.options.getString('to_tz');
 
         const utcHour = ((pktHour - 5) % 24 + 24) % 24;
         const utcMinute = pktMinute;
 
-        let timezone = COUNTRY_TIMEZONES[countryInput];
-
-        if (!timezone) {
-            const match = Object.keys(COUNTRY_TIMEZONES)
-                .find(k => k.includes(countryInput) || countryInput.includes(k));
-            if (match) timezone = COUNTRY_TIMEZONES[match];
-        }
+        // Ana ülke timezone'u çöz
+        let timezone = resolveTimezone(countryInput);
 
         if (!timezone) {
             const suggestions = Object.keys(COUNTRY_TIMEZONES)
@@ -394,28 +445,78 @@ module.exports = {
 
         const pktDisplay = `${String(pktHour).padStart(2, '0')}:${String(pktMinute).padStart(2, '0')} PKT`;
 
+        // Embed fields oluştur
+        const fields = [
+            {
+                name: '🕐 Local Time',
+                value: `**${timeData.localTime}**`,
+                inline: true
+            },
+            {
+                name: '🌍 Timezone',
+                value: `\`${timeData.offset}\``,
+                inline: true
+            },
+            {
+                name: '⏰ Discord Timestamp',
+                value: `<t:${timeData.timestamp}:t> (<t:${timeData.timestamp}:R>)`,
+                inline: false
+            }
+        ];
+
+        // to_tz opsiyonu varsa ekle
+        if (toTzInput) {
+            const toTzResolved = resolveTimezone(toTzInput);
+
+            if (!toTzResolved) {
+                // to_tz bulunamadıysa uyarı ver ama ana sonucu yine de göster
+                fields.push({
+                    name: '⚠️ to_tz Not Found',
+                    value: `\`${toTzInput}\` could not be resolved. Try a country name, IANA zone (e.g. \`Europe/Berlin\`), or offset (e.g. \`UTC+3\`).`,
+                    inline: false
+                });
+            } else {
+                let toTzData;
+                try {
+                    toTzData = getTimeInZone(utcHour, utcMinute, toTzResolved);
+                } catch {
+                    fields.push({
+                        name: '⚠️ to_tz Error',
+                        value: `Could not calculate time for \`${toTzInput}\`.`,
+                        inline: false
+                    });
+                }
+
+                if (toTzData) {
+                    // to_tz display adı: orijinal input'u güzelleştir
+                    const displayToTz = toTzInput.trim()
+                        .split(' ')
+                        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+                        .join(' ');
+
+                    fields.push(
+                        { name: '\u200b', value: '─────────────────', inline: false },
+                        {
+                            name: `🌐 Also in ${displayToTz}`,
+                            value: `**${toTzData.localTime}**`,
+                            inline: true
+                        },
+                        {
+                            name: '🌍 Timezone',
+                            value: `\`${toTzData.offset}\``,
+                            inline: true
+                        }
+                    );
+                }
+            }
+        }
+
         await interaction.reply({
             embeds: [{
                 color: 0xe8003d,
                 title: '🏁 Race Time Converter',
                 description: `The race starts at **${pktDisplay}** (Pakistan Time)\nFor **${displayCountry}**:`,
-                fields: [
-                    {
-                        name: '🕐 Local Time',
-                        value: `**${timeData.localTime}**`,
-                        inline: true
-                    },
-                    {
-                        name: '🌍 Timezone',
-                        value: `\`${timeData.offset}\``,
-                        inline: true
-                    },
-                    {
-                        name: '⏰ Discord Timestamp',
-                        value: `<t:${timeData.timestamp}:t> (<t:${timeData.timestamp}:R>)`,
-                        inline: false
-                    }
-                ],
+                fields,
                 footer: {
                     text: 'Default: 6:00 PM PKT (UTC+5)'
                 }
