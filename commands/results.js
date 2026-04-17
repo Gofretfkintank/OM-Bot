@@ -1,9 +1,6 @@
 const { 
     SlashCommandBuilder, 
-    PermissionFlagsBits,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle
+    PermissionFlagsBits 
 } = require('discord.js');
 
 const Driver = require('../models/Driver');
@@ -33,13 +30,13 @@ function parseIds(input, interaction) {
     for (const word of words) {
         const cleaned = word.replace(/[<@!>]/g, '').trim();
 
-        // Direkt ID ise
+        // Direct ID check
         if (/^\d+$/.test(cleaned)) {
             ids.push(cleaned);
             continue;
         }
 
-        // Username / Nickname ile bul
+        // Find by Username / Nickname
         const member = interaction.guild.members.cache.find(m =>
             m.user.username.toLowerCase() === cleaned.toLowerCase() ||
             m.displayName.toLowerCase() === cleaned.toLowerCase()
@@ -113,13 +110,6 @@ module.exports = {
         }
 
         const participantIds = participants.map(p => String(p.id));
-
-        // --------------------------
-        // RESET VOTERS
-        // --------------------------
-        if (isGP) {
-            await Driver.updateMany({}, { $set: { voters: [] } });
-        }
 
         // --------------------------
         // STATS UPDATE
@@ -198,26 +188,5 @@ module.exports = {
         msg += `\n<@&1452705943967105046>`;
 
         await interaction.reply({ content: msg });
-
-        // --------------------------
-        // DOTY VOTING
-        // --------------------------
-        if (isGP) {
-            const row = new ActionRowBuilder();
-
-            participants.forEach(user => {
-                row.addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`doty_${user.id}`)
-                        .setLabel(user.username)
-                        .setStyle(ButtonStyle.Primary)
-                );
-            });
-
-            await interaction.followUp({
-                content: '⭐ Vote for Driver of the Day!',
-                components: [row]
-            });
-        }
     }
 };
