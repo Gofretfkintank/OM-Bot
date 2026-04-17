@@ -31,6 +31,7 @@ const Driver = require('./models/Driver');
 const DotyVote = require('./models/DotyVote');
 const SeasonVote = require('./models/SeasonVote');
 const Maintenance = require('./models/Maintenance');
+const PrefixConfig = require('./models/PrefixConfig');
 const { onStartup: teamRadioStartup } = require('./commands/teamradio');
 
 //--------------------------
@@ -549,6 +550,65 @@ http.createServer((req, res) => {
     res.end();
 }).listen(process.env.PORT || 3000, () => {
     console.log(`📡 Heartbeat server listening on port ${process.env.PORT || 3000}`);
+});
+
+//--------------------------
+// PREFIX CACHE
+//--------------------------
+
+// RAM'de tutuyoruz → her mesajda DB sorgusu atmamak için
+const prefixCache = new Map();
+const DEFAULT_PREFIX = 'om!';
+
+async function getPrefix(guildId) {
+    if (prefixCache.has(guildId)) return prefixCache.get(guildId);
+    const config = await PrefixConfig.findOne({ guildId }).catch(() => null);
+    const prefix = config?.prefix || DEFAULT_PREFIX;
+    prefixCache.set(guildId, prefix);
+    return prefix;
+}
+
+// setprefix komutu prefix'i değiştirince cache'i temizle
+client.on('prefixUpdate', (guildId) => {
+    prefixCache.delete(guildId);
+});
+
+//--------------------------
+// PREFIX COMMAND HANDLER
+//--------------------------
+
+client.on('messageCreate', async message => {
+    if (message.author.bot) return;
+    if (!message.guild) return;
+    if (!allowedGuilds.includes(message.guildId)) return;
+
+    const prefix = await getPrefix(message.guildId);
+
+    if (!message.content.toLowerCase().startsWith(prefix.toLowerCase())) return;
+
+    const args = message.content.slice(prefix.length).trim().split(/\s+/);
+    const commandName = args.shift().toLowerCase();
+
+    // ---- Komutlar ----
+
+    if (commandName === 'ping') {
+        const latency = Date.now() - message.createdTimestamp;
+        return message.reply(`🏓 Pong! \`${latency}ms\` | API: \`${client.ws.ping}ms\``);
+    }
+
+    if (commandName === 'prefix') {
+        return message.reply(`📌 Current prefix: \`${prefix}\`\nChange it with \`/setprefix\``);
+    }
+
+    if (commandName === 'help') {
+        return message.reply(
+            `**OM-Bot Prefix Commands** (prefix: \`${prefix}\`)\n` +
+            `\`${prefix}ping\` — Latency check\n` +
+            `\`${prefix}prefix\` — Show current prefix\n` +
+            `\`${prefix}help\` — This message\n\n` +
+            `*All other commands are slash commands. Type \`/\` to see them.*`
+        );
+    }
 });
 
 //--------------------------
