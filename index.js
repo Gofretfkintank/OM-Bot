@@ -29,6 +29,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 const Driver = require('./models/Driver');
 const DotyVote = require('./models/DotyVote');
+const SeasonVote = require('./models/SeasonVote');
 const Maintenance = require('./models/Maintenance');
 const { onStartup: teamRadioStartup } = require('./commands/teamradio');
 
@@ -231,6 +232,90 @@ client.once('ready', async () => {
             console.error('AUTO LOOP ERROR:', err);
         }
     }, 15000);
+
+    //--------------------------
+    // DOTS / TOTS AUTO END LOOP
+    //--------------------------
+
+    setInterval(async () => {
+        try {
+            const seasonVotes = await SeasonVote.find({
+                finished: false,
+                endTime: { $lte: Date.now() }
+            });
+
+            for (const vote of seasonVotes) {
+                try {
+                    const channel = await client.channels.fetch(vote.channelId).catch(() => null);
+                    if (!channel) continue;
+
+                    const message = await channel.messages.fetch(vote.messageId).catch(() => null);
+
+                    let max = 0;
+                    for (const v of vote.votes.values()) {
+                        if (v > max) max = v;
+                    }
+
+                    const winners = [];
+                    for (const [key, v] of vote.votes) {
+                        if (v === max && max > 0) winners.push(key);
+                    }
+
+                    const { EmbedBuilder } = require('discord.js');
+
+                    const makeSeasonBar = (count, total) => {
+                        const pct = total === 0 ? 0 : count / total;
+                        const filled = Math.round(pct * 12);
+                        return '█'.repeat(filled) + '░'.repeat(12 - filled);
+                    };
+
+                    const total = vote.participants.reduce((s, p) => s + (vote.votes.get(p) || 0), 0);
+                    const isDots = vote.type === 'dots';
+                    const typeLabel = isDots ? 'DRIVER OF THE SEASON' : 'TEAM OF THE SEASON';
+
+                    const resultLines = [...vote.participants]
+                        .sort((a, b) => (vote.votes.get(b) || 0) - (vote.votes.get(a) || 0))
+                        .map(p => {
+                            const v = vote.votes.get(p) || 0;
+                            const pct = total === 0 ? 0 : Math.round((v / total) * 100);
+                            const label = isDots ? `<@${p}>` : `**${p}**`;
+                            return `${label}\n\`${makeSeasonBar(v, total)}\` **${v}** votes (${pct}%)`;
+                        })
+                        .join('\n\n');
+
+                    let winnerText;
+                    if (winners.length === 0) {
+                        winnerText = '❌ No votes were cast.';
+                    } else if (winners.length > 1) {
+                        const wLabels = winners.map(w => isDots ? `<@${w}>` : `**${w}**`).join(' & ');
+                        winnerText = `🤝 TIE: ${wLabels}`;
+                    } else {
+                        const wLabel = isDots ? `<@${winners[0]}>` : `**${winners[0]}**`;
+                        winnerText = `🏆 WINNER: ${wLabel}`;
+                    }
+
+                    const resultEmbed = new EmbedBuilder()
+                        .setTitle(`🏆 ${typeLabel} — RESULTS`)
+                        .setColor(0xFFD700)
+                        .setDescription(`**${winnerText}**\n\n${resultLines}`)
+                        .setFooter({ text: `Total votes: ${total} • Voting ended` });
+
+                    if (message) {
+                        await message.edit({ embeds: [resultEmbed], components: [] }).catch(() => {});
+                    }
+
+                    vote.finished = true;
+                    await vote.save();
+
+                } catch (err) {
+                    console.error('[SEASON VOTE END ERROR]', err);
+                }
+            }
+        } catch (err) {
+            console.error('[SEASON VOTE LOOP ERROR]', err);
+        }
+    }, 15000);
+
 });
 
 //--------------------------
@@ -371,6 +456,72 @@ client.on('interactionCreate', async interaction => {
 
         } catch (err) {
             console.error('VOTING BUTTON ERROR:', err);
+        }
+    }
+
+    //--------------------------
+    // DOTS BUTTON SYSTEM
+    //--------------------------
+
+    else if (interaction.isButton() && interaction.customId.startsWith('dots_')) {
+        try {
+            const votedId = interaction.customId.replace('dots_', '');
+
+            const vote = await SeasonVote.findOne({
+                messageId: interaction.message.id,
+                type: 'dots',
+                finished: false
+            });
+
+            if (!vote) return interaction.reply({ content: '❌ Active DOTS session not found.', ephemeral: true });
+            if (Date.now() > vote.endTime) return interaction.reply({ content: '❌ Voting has ended.', ephemeral: true });
+            if (!vote.participants.includes(votedId)) return interaction.reply({ content: '❌ Invalid candidate.', ephemeral: true });
+            if (vote.voters.includes(interaction.user.id)) return interaction.reply({ content: '❌ You already voted!', ephemeral: true });
+
+            vote.votes.set(votedId, (vote.votes.get(votedId) || 0) + 1);
+            vote.voters.push(interaction.user.id);
+            await vote.save();
+
+            await interaction.reply({ content: `✅ Vote recorded for <@${votedId}>!`, ephemeral: true });
+
+        } catch (err) {
+            console.error('[DOTS BUTTON ERROR]', err);
+        }
+    }
+
+    //--------------------------
+    // TOTS BUTTON SYSTEM
+    //--------------------------
+
+    else if (interaction.isButton() && interaction.customId.startsWith('tots_')) {
+        try {
+            const safeKey = interaction.customId.replace('tots_', '');
+
+            const vote = await SeasonVote.findOne({
+                messageId: interaction.message.id,
+                type: 'tots',
+                finished: false
+            });
+
+            if (!vote) return interaction.reply({ content: '❌ Active TOTS session not found.', ephemeral: true });
+            if (Date.now() > vote.endTime) return interaction.reply({ content: '❌ Voting has ended.', ephemeral: true });
+            if (vote.voters.includes(interaction.user.id)) return interaction.reply({ content: '❌ You already voted!', ephemeral: true });
+
+            // safeId eşleşmesini bul
+            const matched = vote.participants.find(name =>
+                name.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40) === safeKey
+            );
+
+            if (!matched) return interaction.reply({ content: '❌ Invalid team selection.', ephemeral: true });
+
+            vote.votes.set(matched, (vote.votes.get(matched) || 0) + 1);
+            vote.voters.push(interaction.user.id);
+            await vote.save();
+
+            await interaction.reply({ content: `✅ Vote recorded for **${matched}**!`, ephemeral: true });
+
+        } catch (err) {
+            console.error('[TOTS BUTTON ERROR]', err);
         }
     }
 
