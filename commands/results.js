@@ -8,9 +8,9 @@ const {
 
 const Driver = require('../models/Driver');
 
-// --------------------
+// --------------------------
 // GET / CREATE DRIVER
-// --------------------
+// --------------------------
 async function getDriver(userId) {
     let driver = await Driver.findOne({ userId });
 
@@ -21,21 +21,41 @@ async function getDriver(userId) {
     return driver;
 }
 
-// --------------------
-// PARSE IDS
-// --------------------
-function parseIds(input) {
+// --------------------------
+// PARSE IDS (FIXED)
+// --------------------------
+function parseIds(input, interaction) {
     if (!input) return [];
 
-    return input
-        .split(/[\s,]+/)
-        .map(id => id.replace(/[<@!>]/g, '').trim())
-        .filter(id => id.length > 0);
+    const words = input.split(/[\s,]+/);
+    const ids = [];
+
+    for (const word of words) {
+        const cleaned = word.replace(/[<@!>]/g, '').trim();
+
+        // Direkt ID ise
+        if (/^\d+$/.test(cleaned)) {
+            ids.push(cleaned);
+            continue;
+        }
+
+        // Username / Nickname ile bul
+        const member = interaction.guild.members.cache.find(m =>
+            m.user.username.toLowerCase() === cleaned.toLowerCase() ||
+            m.displayName.toLowerCase() === cleaned.toLowerCase()
+        );
+
+        if (member) {
+            ids.push(member.id);
+        }
+    }
+
+    return ids;
 }
 
-// --------------------
+// --------------------------
 // COMMAND
-// --------------------
+// --------------------------
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('results')
@@ -69,8 +89,8 @@ module.exports = {
         .addUserOption(opt => opt.setName('p9').setDescription('9th Place'))
         .addUserOption(opt => opt.setName('p10').setDescription('10th Place'))
 
-        .addStringOption(opt => opt.setName('dnf').setDescription('DNF drivers (@user or ID)'))
-        .addStringOption(opt => opt.setName('dns').setDescription('DNS drivers (@user or ID)'))
+        .addStringOption(opt => opt.setName('dnf').setDescription('DNF drivers (@user, ID, or username)'))
+        .addStringOption(opt => opt.setName('dns').setDescription('DNS drivers (@user, ID, or username)'))
         .addStringOption(opt => opt.setName('comments').setDescription('Race comments')),
 
     async execute(interaction) {
@@ -83,9 +103,9 @@ module.exports = {
         const isGP = raceType === 'gp';
         const isSprint = raceType === 'sprint';
 
-        // --------------------
+        // --------------------------
         // PARTICIPANTS
-        // --------------------
+        // --------------------------
         const participants = [];
         for (let i = 1; i <= 10; i++) {
             const user = interaction.options.getUser(`p${i}`);
@@ -94,16 +114,16 @@ module.exports = {
 
         const participantIds = participants.map(p => String(p.id));
 
-        // --------------------
-        // RESET VOTERS (🔥 DB)
-        // --------------------
+        // --------------------------
+        // RESET VOTERS
+        // --------------------------
         if (isGP) {
             await Driver.updateMany({}, { $set: { voters: [] } });
         }
 
-        // --------------------
+        // --------------------------
         // STATS UPDATE
-        // --------------------
+        // --------------------------
         for (const [index, user] of participants.entries()) {
             const driver = await getDriver(user.id);
 
@@ -121,11 +141,11 @@ module.exports = {
             await driver.save();
         }
 
-        // --------------------
-        // DNF / DNS
-        // --------------------
-        const dnfList = parseIds(interaction.options.getString('dnf'));
-        const dnsList = parseIds(interaction.options.getString('dns'));
+        // --------------------------
+        // DNF / DNS (FIXED)
+        // --------------------------
+        const dnfList = parseIds(interaction.options.getString('dnf'), interaction);
+        const dnsList = parseIds(interaction.options.getString('dns'), interaction);
 
         for (const id of dnfList) {
             const driver = await getDriver(id);
@@ -145,20 +165,14 @@ module.exports = {
             await driver.save();
         }
 
-        // --------------------
+        // --------------------------
         // FORMAT
-        // --------------------
-        const format = async (id) => {
-            try {
-                return `<@${id}>`;
-            } catch {
-                return `Unknown(${id})`;
-            }
-        };
+        // --------------------------
+        const format = async (id) => `<@${id}>`;
 
-        // --------------------
+        // --------------------------
         // MESSAGE
-        // --------------------
+        // --------------------------
         let msg = `# ${track.toUpperCase()} - ${isGP ? 'GRAND PRIX' : 'SPRINT'}\n\n`;
 
         participants.forEach((user, i) => {
@@ -185,9 +199,9 @@ module.exports = {
 
         await interaction.reply({ content: msg });
 
-        // --------------------
+        // --------------------------
         // DOTY VOTING
-        // --------------------
+        // --------------------------
         if (isGP) {
             const row = new ActionRowBuilder();
 
