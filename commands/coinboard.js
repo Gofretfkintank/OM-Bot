@@ -17,7 +17,7 @@ module.exports = {
             .limit(10);
 
         if (!top.length) {
-            return interaction.editReply('❌ Henüz kimse coin kazanmamış.');
+            return interaction.editReply('❌ Nobody has earned any coins yet.');
         }
 
         const lines = await Promise.all(
@@ -39,7 +39,7 @@ module.exports = {
         let selfRank = '';
         if (selfWallet) {
             const rank = await Economy.countDocuments({ coins: { $gt: selfWallet.coins } });
-            selfRank = `\n\n📍 Senin sıran: **#${rank + 1}** | **${selfWallet.coins.toLocaleString()} 🪙**`;
+            selfRank = `\n\n📍 Your rank: **#${rank + 1}** | **${selfWallet.coins.toLocaleString()} 🪙**`;
         }
 
         const embed = new EmbedBuilder()
