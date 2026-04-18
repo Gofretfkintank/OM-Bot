@@ -1,15 +1,15 @@
 // commands/shop.js
-// OM Economy Shop — Coin Harcama Sistemi
+// OM Economy Shop — Coin Spending System
 // ─────────────────────────────────────────────────────────────────────────────
-// /shop list      → Mevcut ürünleri göster
-// /shop buy       → Ürün satın al
-// /shop inventory → Sahip olunan ürünleri göster
+// /shop list      → Show available items
+// /shop buy       → Purchase an item
+// /shop inventory → View owned items
 //
-// Ürün kategorileri:
-//   ROLE_COLOR  → Belirli bir Discord rolü verir (renkli unvan)
-//   CUSTOM_NICK → Kendi nickini bir yarış için özelleştirme hakkı (admin onayı)
-//   BOOST       → Bir sonraki yarışta ekstra coin kazanımı (%50 bonus)
-//   FLEX        → Saf statü, para yakma, leaderboard'da rozet
+// Item Categories:
+//   ROLE_COLOR  → Gives a specific Discord role (colored title)
+//   CUSTOM_NICK → Right to customize nickname for a race (admin approval)
+//   BOOST       → Extra coin gain in the next race (50% bonus)
+//   FLEX        → Pure status, money sink, leaderboard badge
 // ─────────────────────────────────────────────────────────────────────────────
 
 const {
@@ -21,26 +21,26 @@ const {
 
 const Economy = require('../models/Economy');
 
-// ── Ürün Kataloğu ─────────────────────────────────────────────────────────────
-// type: 'role'       → roleId ile Discord rolü verir
-// type: 'boost'      → wallet.raceBoost = true yapar (raceBoost flag'i)
-// type: 'flex'       → sadece coin düşer, inventory'e ekler
+// ── Item Catalog ─────────────────────────────────────────────────────────────
+// type: 'role'       → Gives a Discord role via roleId
+// type: 'boost'      → Sets wallet.raceBoost = true
+// type: 'flex'       → Deducts coins, adds to inventory
 // ─────────────────────────────────────────────────────────────────────────────
 const SHOP_ITEMS = [
-    // ── Renkli Roller ──────────────────────────────────────────────────────
+    // ── Colored Roles ────────────────────────────────────────────────────────
     {
         id: 'role_bronze',
         name: '🟫 Bronze Driver',
-        description: 'Bronze renkli özel sürücü rolü.',
+        description: 'Special Bronze colored driver role.',
         price: 500,
         type: 'role',
-        roleId: process.env.SHOP_ROLE_BRONZE,  // .env'den çekilir
+        roleId: process.env.SHOP_ROLE_BRONZE,  // Pulled from .env
         emoji: '🟫'
     },
     {
         id: 'role_silver',
         name: '⬜ Silver Driver',
-        description: 'Silver renkli özel sürücü rolü.',
+        description: 'Special Silver colored driver role.',
         price: 1000,
         type: 'role',
         roleId: process.env.SHOP_ROLE_SILVER,
@@ -49,7 +49,7 @@ const SHOP_ITEMS = [
     {
         id: 'role_gold',
         name: '🟨 Gold Driver',
-        description: 'Gold renkli özel sürücü rolü. Prestij simgesi.',
+        description: 'Special Gold colored driver role. A symbol of prestige.',
         price: 2000,
         type: 'role',
         roleId: process.env.SHOP_ROLE_GOLD,
@@ -58,28 +58,28 @@ const SHOP_ITEMS = [
     {
         id: 'role_champion',
         name: '👑 Champion Aura',
-        description: 'En prestijli OM rolü. Sadece zenginler için.',
+        description: 'The most prestigious OM role. Only for the elite.',
         price: 5000,
         type: 'role',
         roleId: process.env.SHOP_ROLE_CHAMPION,
         emoji: '👑'
     },
 
-    // ── Race Boost ─────────────────────────────────────────────────────────
+    // ── Race Boost ───────────────────────────────────────────────────────────
     {
         id: 'boost_race',
         name: '🚀 Race Boost',
-        description: 'Bir sonraki yarışta coin ödüllerin %50 artar. Tek kullanımlık.',
+        description: 'Your coin rewards increase by 50% in the next race. One-time use.',
         price: 300,
         type: 'boost',
         emoji: '🚀'
     },
 
-    // ── Flex Items ─────────────────────────────────────────────────────────
+    // ── Flex Items ───────────────────────────────────────────────────────────
     {
         id: 'flex_pitwall',
         name: '🎙️ Pit Wall Pass',
-        description: 'Para yak, statü kazan. Hiçbir işe yaramaz ama leaderboard\'da görünür.',
+        description: 'Burn coins, gain status. Does nothing but looks good on the leaderboard.',
         price: 750,
         type: 'flex',
         emoji: '🎙️'
@@ -87,14 +87,14 @@ const SHOP_ITEMS = [
     {
         id: 'flex_helmet',
         name: '🪖 Signed Helmet',
-        description: 'Koleksiyon objesi. OM tarihinin bir parçası olarak kayıtlısın.',
+        description: 'Collector\'s item. You are recorded as a part of OM history.',
         price: 1500,
         type: 'flex',
         emoji: '🪖'
     }
 ];
 
-// ── Yardımcı: Economy kaydı getir/oluştur ─────────────────────────────────────
+// ── Helper: Fetch/Create Economy Record ──────────────────────────────────────
 async function getWallet(userId) {
     let wallet = await Economy.findOne({ userId });
     if (!wallet) wallet = new Economy({ userId });
@@ -106,17 +106,17 @@ async function getWallet(userId) {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('shop')
-        .setDescription('OM Economy Shop — coin harca, statü kazan.')
+        .setDescription('OM Economy Shop — spend coins, gain status.')
         .addSubcommand(sub =>
             sub.setName('list')
-                .setDescription('Mevcut ürünleri göster.')
+                .setDescription('Show available items.')
         )
         .addSubcommand(sub =>
             sub.setName('buy')
-                .setDescription('Bir ürün satın al.')
+                .setDescription('Purchase an item.')
                 .addStringOption(opt =>
                     opt.setName('item')
-                        .setDescription('Satın alınacak ürün ID\'si (/shop list ile gör)')
+                        .setDescription('Item ID to purchase (see /shop list)')
                         .setRequired(true)
                         .addChoices(
                             ...SHOP_ITEMS.map(i => ({ name: `${i.emoji} ${i.name} — ${i.price} 🪙`, value: i.id }))
@@ -125,10 +125,10 @@ module.exports = {
         )
         .addSubcommand(sub =>
             sub.setName('inventory')
-                .setDescription('Sahip olduğun ürünleri gör.')
+                .setDescription('View owned items.')
                 .addUserOption(opt =>
                     opt.setName('driver')
-                        .setDescription('Başka bir sürücünün envanterini gör (opsiyonel)')
+                        .setDescription('View another driver\'s inventory (optional)')
                         .setRequired(false)
                 )
         ),
@@ -136,7 +136,7 @@ module.exports = {
     async execute(interaction) {
         const sub = interaction.options.getSubcommand();
 
-        // ── /shop list ─────────────────────────────────────────────────────
+        // ── /shop list ───────────────────────────────────────────────────────
         if (sub === 'list') {
             const wallet = await getWallet(interaction.user.id);
 
@@ -149,7 +149,7 @@ module.exports = {
             const embed = new EmbedBuilder()
                 .setColor(0xf5c518)
                 .setTitle('🏪 OM Economy Shop')
-                .setDescription(`Mevcut bakiyen: **${wallet.coins.toLocaleString()} 🪙**\n\nAlmak için: \`/shop buy\``)
+                .setDescription(`Your balance: **${wallet.coins.toLocaleString()} 🪙**\n\nTo purchase: \`/shop buy\``)
                 .addFields(fields)
                 .setFooter({ text: 'OM Economy System' })
                 .setTimestamp();
@@ -157,38 +157,38 @@ module.exports = {
             return interaction.reply({ embeds: [embed], ephemeral: true });
         }
 
-        // ── /shop buy ──────────────────────────────────────────────────────
+        // ── /shop buy ────────────────────────────────────────────────────────
         if (sub === 'buy') {
             const itemId = interaction.options.getString('item');
             const item = SHOP_ITEMS.find(i => i.id === itemId);
 
             if (!item) {
-                return interaction.reply({ content: '❌ Geçersiz ürün.', ephemeral: true });
+                return interaction.reply({ content: '❌ Invalid item.', ephemeral: true });
             }
 
             const wallet = await getWallet(interaction.user.id);
 
-            // Bakiye kontrolü
+            // Balance check
             if (wallet.coins < item.price) {
                 return interaction.reply({
-                    content: `❌ Yeterli coin yok. Bakiyen: **${wallet.coins.toLocaleString()} 🪙** | Gerekli: **${item.price.toLocaleString()} 🪙**`,
+                    content: `❌ Insufficient coins. Your balance: **${wallet.coins.toLocaleString()} 🪙** | Required: **${item.price.toLocaleString()} 🪙**`,
                     ephemeral: true
                 });
             }
 
-            // Zaten sahipse kontrol (rol ve flex için)
+            // Already owned check (for roles and flex)
             if (item.type !== 'boost' && wallet.inventory?.includes(itemId)) {
                 return interaction.reply({
-                    content: `❌ Bu ürüne zaten sahipsin: **${item.name}**`,
+                    content: `❌ You already own this item: **${item.name}**`,
                     ephemeral: true
                 });
             }
 
-            // ── ROL TİPİ ───────────────────────────────────────────────────
+            // ── ROLE TYPE ────────────────────────────────────────────────────
             if (item.type === 'role') {
                 if (!item.roleId) {
                     return interaction.reply({
-                        content: `❌ Bu rol henüz yapılandırılmamış. Adminlere haber ver.`,
+                        content: `❌ This role is not configured yet. Please notify the admins.`,
                         ephemeral: true
                     });
                 }
@@ -196,7 +196,7 @@ module.exports = {
                 const role = interaction.guild.roles.cache.get(item.roleId);
                 if (!role) {
                     return interaction.reply({
-                        content: `❌ Rol Discord'da bulunamadı. Adminlere haber ver.`,
+                        content: `❌ Role not found in Discord. Please notify the admins.`,
                         ephemeral: true
                     });
                 }
@@ -205,20 +205,19 @@ module.exports = {
                 await member.roles.add(role);
             }
 
-            // ── BOOST TİPİ ─────────────────────────────────────────────────
+            // ── BOOST TYPE ───────────────────────────────────────────────────
             if (item.type === 'boost') {
                 if (wallet.raceBoost) {
                     return interaction.reply({
-                        content: `❌ Zaten aktif bir Race Boost\'un var. Önce onu kullan.`,
+                        content: `❌ You already have an active Race Boost. Use it first!`,
                         ephemeral: true
                     });
                 }
                 wallet.raceBoost = true;
             }
 
-            // ── Coin düş + Inventory güncelle ──────────────────────────────
+            // ── Deduct Coins + Update Inventory ──────────────────────────────
             wallet.coins -= item.price;
-            // totalEarned düşmez (harcama geçmişini etkilemez)
 
             if (!wallet.inventory) wallet.inventory = [];
             if (item.type !== 'boost' || !wallet.inventory.includes(itemId)) {
@@ -229,11 +228,11 @@ module.exports = {
 
             const embed = new EmbedBuilder()
                 .setColor(0x00c851)
-                .setTitle('✅ Satın Alma Başarılı')
-                .setDescription(`**${item.emoji} ${item.name}** satın alındı!`)
+                .setTitle('✅ Purchase Successful')
+                .setDescription(`**${item.emoji} ${item.name}** has been purchased!`)
                 .addFields(
-                    { name: '💸 Harcanan', value: `**${item.price.toLocaleString()} 🪙**`, inline: true },
-                    { name: '🪙 Kalan Bakiye', value: `**${wallet.coins.toLocaleString()} 🪙**`, inline: true }
+                    { name: '💸 Spent', value: `**${item.price.toLocaleString()} 🪙**`, inline: true },
+                    { name: '🪙 Remaining Balance', value: `**${wallet.coins.toLocaleString()} 🪙**`, inline: true }
                 )
                 .setFooter({ text: 'OM Economy System' })
                 .setTimestamp();
@@ -241,7 +240,7 @@ module.exports = {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // ── /shop inventory ────────────────────────────────────────────────
+        // ── /shop inventory ──────────────────────────────────────────────────
         if (sub === 'inventory') {
             const target = interaction.options.getUser('driver') ?? interaction.user;
             const wallet = await getWallet(target.id);
@@ -254,8 +253,8 @@ module.exports = {
             let desc;
             if (owned.length === 0) {
                 desc = target.id === interaction.user.id
-                    ? 'Henüz hiçbir şey almadın. `/shop list` ile bak.'
-                    : 'Bu sürücünün envanteri boş.';
+                    ? 'You haven\'t purchased anything yet. Check `/shop list`.'
+                    : 'This driver\'s inventory is empty.';
             } else {
                 desc = owned.map(id => {
                     const item = SHOP_ITEMS.find(i => i.id === id);
@@ -265,7 +264,7 @@ module.exports = {
                 }).join('\n');
 
                 if (wallet.raceBoost) {
-                    desc += '\n🚀 **Race Boost** — Aktif (bir sonraki yarışta kullanılacak)';
+                    desc += '\n🚀 **Race Boost** — Active (will be used in the next race)';
                 }
             }
 
@@ -277,8 +276,8 @@ module.exports = {
                 })
                 .setDescription(desc)
                 .addFields(
-                    { name: '🪙 Mevcut Bakiye', value: `**${wallet.coins.toLocaleString()} 🪙**`, inline: true },
-                    { name: '📦 Toplam Ürün', value: `**${owned.length}**`, inline: true }
+                    { name: '🪙 Current Balance', value: `**${wallet.coins.toLocaleString()} 🪙**`, inline: true },
+                    { name: '📦 Total Items', value: `**${owned.length}**`, inline: true }
                 )
                 .setFooter({ text: 'OM Economy System' })
                 .setTimestamp();
