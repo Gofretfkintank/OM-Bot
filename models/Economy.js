@@ -23,7 +23,13 @@ const economySchema = new mongoose.Schema({
     lastLevelRewarded: { type: Number, default: 0 },
 
     // Anti-spam: son bots kanalı ödülü
-    lastBotsReward: { type: Date, default: null }
+    lastBotsReward: { type: Date, default: null },
+
+    // Shop: satın alınan ürünlerin ID listesi
+    inventory: { type: [String], default: [] },
+
+    // Race Boost: bir sonraki yarışta +%50 coin (tek kullanım)
+    raceBoost: { type: Boolean, default: false }
 
 }, { timestamps: true });
 
@@ -34,7 +40,7 @@ economySchema.methods.addCoins = async function (amount) {
     await this.save();
 };
 
-// Coin düş
+// Coin düş (0'ın altına inmez)
 economySchema.methods.removeCoins = async function (amount) {
     this.coins = Math.max(0, this.coins - amount);
     await this.save();
