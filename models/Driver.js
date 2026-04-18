@@ -7,23 +7,37 @@ const driverSchema = new mongoose.Schema({
         unique: true
     },
 
-    races: { type: Number, default: 0 },
-    wins: { type: Number, default: 0 },
+    races:   { type: Number, default: 0 },
+    wins:    { type: Number, default: 0 },
     podiums: { type: Number, default: 0 },
-    poles: { type: Number, default: 0 },
+    poles:   { type: Number, default: 0 },
 
     dnf: { type: Number, default: 0 },
     dns: { type: Number, default: 0 },
 
-    wdc: { type: Number, default: 0 },
-    wcc: { type: Number, default: 0 },
-
+    wdc:  { type: Number, default: 0 },
+    wcc:  { type: Number, default: 0 },
     doty: { type: Number, default: 0 },
 
     voters: {
         type: [String],
         default: []
+    },
+
+    // Son 10 yarışın pozisyon geçmişi (sponsor skor hesabı için)
+    // pos: 1-10 = bitiş pozisyonu, 99 = DNF
+    // type: 'gp' | 'sprint'
+    raceHistory: {
+        type: [
+            {
+                pos:  { type: Number, required: true },
+                type: { type: String, enum: ['gp', 'sprint'], default: 'gp' },
+                date: { type: Date, default: Date.now }
+            }
+        ],
+        default: []
     }
+
 }, {
     timestamps: true
 });
