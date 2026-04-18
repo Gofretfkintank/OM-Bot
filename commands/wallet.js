@@ -5,15 +5,15 @@ const Economy = require('../models/Economy');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('wallet')
-        .setDescription('Coin bakiyeni ve istatistiklerini gösterir.')
+        .setDescription('Shows your coin balance and stats.')
         .addUserOption(opt =>
-            opt.setName('pilot')
-                .setDescription('Başka bir pilotur cüzdanına bak (opsiyonel)')
+            opt.setName('driver')
+                .setDescription('Check another driver\'s wallet (optional)')
                 .setRequired(false)
         ),
 
     async execute(interaction) {
-        const target = interaction.options.getUser('pilot') ?? interaction.user;
+        const target = interaction.options.getUser('driver') ?? interaction.user;
 
         let wallet = await Economy.findOne({ userId: target.id });
 
@@ -24,7 +24,7 @@ module.exports = {
                 await wallet.save();
             } else {
                 return interaction.reply({
-                    content: `❌ **${target.username}** henüz herhangi bir kazanım elde etmemiş.`,
+                    content: `❌ **${target.username}** hasn't earned anything yet.`,
                     ephemeral: true
                 });
             }
@@ -36,14 +36,14 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setColor(0xf5c518)
             .setAuthor({
-                name: `${displayName}'in Cüzdanı`,
+                name: `${displayName}'s Wallet`,
                 iconURL: target.displayAvatarURL({ dynamic: true })
             })
             .addFields(
                 { name: '🪙 Coins', value: `**${wallet.coins.toLocaleString()}**`, inline: true },
-                { name: '📈 Toplam Kazanılan', value: `**${wallet.totalEarned.toLocaleString()}**`, inline: true },
+                { name: '📈 Total Earned', value: `**${wallet.totalEarned.toLocaleString()}**`, inline: true },
                 { name: '🏁 Arcane Level', value: `Lap **${wallet.level}**`, inline: true },
-                { name: '✅ Doğru Cevap', value: `**${wallet.correctAnswers}**`, inline: true },
+                { name: '✅ Correct Answers', value: `**${wallet.correctAnswers}**`, inline: true },
             )
             .setFooter({ text: 'OM Economy System' })
             .setTimestamp();
