@@ -81,9 +81,9 @@ module.exports = function (client) {
 
                 // Tebrik mesajı
                 await message.channel.send(
-                    `🏎️ <@${userId}> lap **${newLevel}**'e ulaştı! ` +
-                    `Hesabına **+${COINS_PER_LEVEL} 🪙** yatırıldı. ` +
-                    `Toplam: **${wallet.coins} 🪙**`
+                    `🏎️ <@${userId}> reached lap **${newLevel}**! ` +
+                    `**+${COINS_PER_LEVEL} 🪙** added to your wallet. ` +
+                    `Balance: **${wallet.coins} 🪙**`
                 );
             } catch (err) {
                 console.error('[EconomyListener] Level ödülü hatası:', err);
@@ -180,9 +180,9 @@ async function rewardUser(userId, channel) {
         await wallet.addCoins(COINS_PER_CORRECT);
 
         await channel.send(
-            `✅ <@${userId}> doğru cevap verdi! ` +
-            `**+${COINS_PER_CORRECT} 🪙** kazandı. ` +
-            `Toplam: **${wallet.coins} 🪙**`
+            `✅ <@${userId}> got the correct answer! ` +
+            `**+${COINS_PER_CORRECT} 🪙** earned. ` +
+            `Balance: **${wallet.coins} 🪙**`
         );
     } catch (err) {
         console.error('[EconomyListener] Coin ödül hatası:', err);
