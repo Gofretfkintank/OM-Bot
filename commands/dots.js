@@ -10,16 +10,15 @@ const SeasonVote = require('../models/SeasonVote');
 
 const VOTE_DURATION_MS = 5 * 60 * 60 * 1000; // 5 saat
 
-// Histogram bar oluşturucu
 function makeBar(count, total) {
     const percent = total === 0 ? 0 : count / total;
     const filled = Math.round(percent * 12);
     return '█'.repeat(filled) + '░'.repeat(12 - filled);
 }
 
-// Live embed oluşturucu
 function buildEmbed(participants, votes, endTime, ended = false) {
-    const total = participants.reduce((sum, id) => sum + (votes.get(id) || 0), 0);
+    // participants = [{ id, username }]
+    const total = participants.reduce((sum, p) => sum + (votes.get(p.id) || 0), 0);
     const remainingMs = Math.max(0, endTime - Date.now());
     const hours = Math.floor(remainingMs / 3600000);
     const minutes = Math.floor((remainingMs % 3600000) / 60000);
@@ -27,26 +26,26 @@ function buildEmbed(participants, votes, endTime, ended = false) {
 
     if (ended) {
         let maxVotes = 0;
-        for (const id of participants) {
-            const v = votes.get(id) || 0;
+        for (const p of participants) {
+            const v = votes.get(p.id) || 0;
             if (v > maxVotes) maxVotes = v;
         }
 
-        const winners = participants.filter(id => (votes.get(id) || 0) === maxVotes && maxVotes > 0);
+        const winners = participants.filter(p => (votes.get(p.id) || 0) === maxVotes && maxVotes > 0);
 
-        const resultLines = participants
-            .sort((a, b) => (votes.get(b) || 0) - (votes.get(a) || 0))
-            .map(id => {
-                const v = votes.get(id) || 0;
+        const resultLines = [...participants]
+            .sort((a, b) => (votes.get(b.id) || 0) - (votes.get(a.id) || 0))
+            .map(p => {
+                const v = votes.get(p.id) || 0;
                 const pct = total === 0 ? 0 : Math.round((v / total) * 100);
-                return `<@${id}>\n\`${makeBar(v, total)}\` **${v}** votes (${pct}%)`;
+                return `<@${p.id}>\n\`${makeBar(v, total)}\` **${v}** votes (${pct}%)`;
             })
             .join('\n\n');
 
         const winnerText = winners.length > 1
-            ? `🤝 TIE: ${winners.map(id => `<@${id}>`).join(' & ')}`
+            ? `🤝 TIE: ${winners.map(p => `<@${p.id}>`).join(' & ')}`
             : winners.length === 1
-            ? `🏆 WINNER: <@${winners[0]}>`
+            ? `🏆 WINNER: <@${winners[0].id}>`
             : '❌ No votes were cast.';
 
         return new EmbedBuilder()
@@ -56,11 +55,11 @@ function buildEmbed(participants, votes, endTime, ended = false) {
             .setFooter({ text: `Total votes: ${total} • Voting ended` });
     }
 
-    const fields = participants.map(id => {
-        const v = votes.get(id) || 0;
+    const fields = participants.map(p => {
+        const v = votes.get(p.id) || 0;
         const pct = total === 0 ? 0 : Math.round((v / total) * 100);
         return {
-            name: `👤 <@${id}>`,
+            name: `👤 ${p.username}`,
             value: `\`${makeBar(v, total)}\` **${v}** (${pct}%)`,
             inline: false
         };
@@ -77,22 +76,20 @@ function buildEmbed(participants, votes, endTime, ended = false) {
         );
 }
 
-// Button row oluşturucu
-function buildRow(participants) {
+function buildRows(participants) {
     const rows = [];
     const chunks = [];
 
-    // Discord max 5 button per row, 5 rows max → 25 button
     for (let i = 0; i < participants.length; i += 5) {
         chunks.push(participants.slice(i, i + 5));
     }
 
     for (const chunk of chunks) {
         const row = new ActionRowBuilder().addComponents(
-            chunk.map(id =>
+            chunk.map(p =>
                 new ButtonBuilder()
-                    .setCustomId(`dots_${id}`)
-                    .setLabel(`Vote`)
+                    .setCustomId(`dots_${p.id}`)
+                    .setLabel(p.username.substring(0, 80) || 'Driver')
                     .setStyle(ButtonStyle.Primary)
             )
         );
@@ -123,18 +120,24 @@ module.exports = {
         const participants = [];
         for (let i = 1; i <= 10; i++) {
             const u = interaction.options.getUser(`p${i}`);
-            if (u && !u.bot) participants.push(u.id);
+            if (u && !u.bot) participants.push({ id: u.id, username: u.username });
         }
 
         if (participants.length < 2) {
             return interaction.editReply({ content: '❌ At least 2 participants required.' });
         }
 
+        // Duplicate check
+        const uniqueIds = [...new Set(participants.map(p => p.id))];
+        if (uniqueIds.length !== participants.length) {
+            return interaction.editReply({ content: '❌ Duplicate participants detected.' });
+        }
+
         const endTime = Date.now() + VOTE_DURATION_MS;
         const votes = new Map();
-        participants.forEach(id => votes.set(id, 0));
+        participants.forEach(p => votes.set(p.id, 0));
 
-        const rows = buildRow(participants);
+        const rows = buildRows(participants);
 
         const msg = await interaction.editReply({
             content: '@everyone 🗳️ **DRIVER OF THE SEASON** vote has started!',
@@ -144,26 +147,29 @@ module.exports = {
             fetchReply: true
         });
 
+        // MongoDB'ye participants'ı sadece ID olarak kaydet (mevcut schema uyumlu)
         const voteData = new SeasonVote({
             type: 'dots',
             messageId: msg.id,
             channelId: msg.channel.id,
             guildId: msg.guild.id,
-            participants,
+            participants: participants.map(p => p.id),
             endTime
         });
 
         await voteData.save();
 
-        // Live embed güncelleme (her 15 sn)
+        // Live embed güncelleme — msg.edit kullan, interaction token 15dk'da expire olur
         const interval = setInterval(async () => {
             try {
                 const fresh = await SeasonVote.findOne({ messageId: msg.id });
                 if (!fresh || fresh.finished) return clearInterval(interval);
                 if (Date.now() >= fresh.endTime) return clearInterval(interval);
 
-                await interaction.editReply({
-                    embeds: [buildEmbed(fresh.participants, fresh.votes, fresh.endTime)]
+                // participants objesini koruyoruz (username için)
+                await msg.edit({
+                    embeds: [buildEmbed(participants, fresh.votes, fresh.endTime)],
+                    components: rows
                 });
             } catch {
                 clearInterval(interval);
