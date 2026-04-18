@@ -3,19 +3,39 @@ const {
     PermissionFlagsBits 
 } = require('discord.js');
 
-const Driver = require('../models/Driver');
+const Driver  = require('../models/Driver');
+const Economy = require('../models/Economy');
+const Sponsor = require('../models/Sponsor');
+const { getSponsorById } = require('../data/sponsorCatalog');
+
+// --------------------------
+// COIN REWARDS BY POSITION
+// --------------------------
+// GP: P1=500, P2=350, P3=250, P4=175, P5=150, P6=125, P7-P10=75
+// Sprint: exactly half of GP rewards
+// DNF: 25 coins (participation)
+// DNS: 0 coins
+
+const GP_REWARDS = [500, 350, 250, 175, 150, 125, 75, 75, 75, 75];
+const SPRINT_REWARDS = GP_REWARDS.map(v => Math.floor(v / 2));
+const DNF_REWARD = 25;
 
 // --------------------------
 // GET / CREATE DRIVER
 // --------------------------
 async function getDriver(userId) {
     let driver = await Driver.findOne({ userId });
-
-    if (!driver) {
-        driver = await Driver.create({ userId });
-    }
-
+    if (!driver) driver = await Driver.create({ userId });
     return driver;
+}
+
+// --------------------------
+// GET / CREATE WALLET
+// --------------------------
+async function getWallet(userId) {
+    let wallet = await Economy.findOne({ userId });
+    if (!wallet) wallet = new Economy({ userId });
+    return wallet;
 }
 
 // --------------------------
@@ -30,21 +50,17 @@ function parseIds(input, interaction) {
     for (const word of words) {
         const cleaned = word.replace(/[<@!>]/g, '').trim();
 
-        // Direct ID check
         if (/^\d+$/.test(cleaned)) {
             ids.push(cleaned);
             continue;
         }
 
-        // Find by Username / Nickname
         const member = interaction.guild.members.cache.find(m =>
             m.user.username.toLowerCase() === cleaned.toLowerCase() ||
             m.displayName.toLowerCase() === cleaned.toLowerCase()
         );
 
-        if (member) {
-            ids.push(member.id);
-        }
+        if (member) ids.push(member.id);
     }
 
     return ids;
@@ -56,7 +72,7 @@ function parseIds(input, interaction) {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('results')
-        .setDescription('Post race results and update statistics')
+        .setDescription('Post race results, update statistics, and distribute coins')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 
         .addStringOption(opt => 
@@ -99,6 +115,7 @@ module.exports = {
 
         const isGP = raceType === 'gp';
         const isSprint = raceType === 'sprint';
+        const rewards = isGP ? GP_REWARDS : SPRINT_REWARDS;
 
         // --------------------------
         // PARTICIPANTS
@@ -112,73 +129,128 @@ module.exports = {
         const participantIds = participants.map(p => String(p.id));
 
         // --------------------------
-        // STATS UPDATE
+        // STATS + COINS UPDATE
         // --------------------------
+        const coinLog = []; // For the embed summary
+
         for (const [index, user] of participants.entries()) {
             const driver = await getDriver(user.id);
+            const wallet = await getWallet(user.id);
 
+            // Stats
             if (isGP) driver.races++;
-
             if (index === 0) {
                 if (isGP) driver.wins++;
                 if (isSprint) driver.poles++;
             }
+            if (isGP && index <= 2) driver.podiums++;
 
-            if (isGP && index <= 2) {
-                driver.podiums++;
-            }
+            // Race History (son 5 yarış trendi için, sponsor skoru hesaplamada kullanılır)
+            if (!driver.raceHistory) driver.raceHistory = [];
+            driver.raceHistory.push({ pos: index + 1, type: raceType, date: new Date() });
+            if (driver.raceHistory.length > 10) driver.raceHistory.shift(); // maksimum 10 kayıt tut
 
             await driver.save();
+
+            // Coins (Race Boost kontrolü)
+            let earned = rewards[index] ?? 0;
+            let boosted = false;
+            if (earned > 0 && wallet.raceBoost) {
+                earned = Math.floor(earned * 1.5);
+                wallet.raceBoost = false; // tek kullanım
+                boosted = true;
+            }
+            if (earned > 0) {
+                await wallet.addCoins(earned);
+                coinLog.push({ user, pos: index + 1, coins: earned, boosted });
+            }
+
+            // Sponsor geliri
+            const sponsorRec = await Sponsor.findOne({ userId: user.id });
+            if (sponsorRec?.activeSponsorId) {
+                const sponsor = getSponsorById(sponsorRec.activeSponsorId);
+                if (sponsor) {
+                    let sponsorEarned = 0;
+
+                    if (isGP) {
+                        sponsorEarned += sponsor.basePerRace;
+                        if (index === 0) sponsorEarned += sponsor.winBonus;      // Galibiyet
+                        else if (index <= 2) sponsorEarned += sponsor.podiumBonus; // Podyum
+                    }
+                    if (isSprint && index === 0) sponsorEarned += sponsor.sprintBonus; // Pole
+
+                    if (sponsorEarned > 0) {
+                        await wallet.addCoins(sponsorEarned);
+                        sponsorRec.racesWithSponsor = (sponsorRec.racesWithSponsor || 0) + (isGP ? 1 : 0);
+                        sponsorRec.totalSponsorEarned = (sponsorRec.totalSponsorEarned || 0) + sponsorEarned;
+                        await sponsorRec.save();
+                        coinLog.push({ user, pos: index + 1, coins: sponsorEarned, isSponsor: true, sponsorName: sponsor.name, sponsorLogo: sponsor.logo });
+                    }
+                }
+            }
         }
 
         // --------------------------
-        // DNF / DNS (FIXED)
+        // DNF / DNS
         // --------------------------
         const dnfList = parseIds(interaction.options.getString('dnf'), interaction);
         const dnsList = parseIds(interaction.options.getString('dns'), interaction);
 
         for (const id of dnfList) {
             const driver = await getDriver(id);
-
             driver.dnf++;
+            if (!participantIds.includes(id) && isGP) driver.races++;
 
-            if (!participantIds.includes(id) && isGP) {
-                driver.races++;
-            }
+            // Race History
+            if (!driver.raceHistory) driver.raceHistory = [];
+            driver.raceHistory.push({ pos: 99, type: raceType, date: new Date() }); // 99 = DNF
+            if (driver.raceHistory.length > 10) driver.raceHistory.shift();
 
             await driver.save();
+
+            // DNF still gets participation coins
+            const wallet = await getWallet(id);
+            await wallet.addCoins(DNF_REWARD);
+            coinLog.push({ userId: id, pos: 'DNF', coins: DNF_REWARD });
+
+            // Sponsor: yarış sayacı artar ama gelir yok
+            if (isGP) {
+                const sponsorRec = await Sponsor.findOne({ userId: id });
+                if (sponsorRec?.activeSponsorId) {
+                    sponsorRec.racesWithSponsor = (sponsorRec.racesWithSponsor || 0) + 1;
+                    await sponsorRec.save();
+                }
+            }
         }
 
         for (const id of dnsList) {
             const driver = await getDriver(id);
             driver.dns++;
             await driver.save();
+            // DNS = 0 coins
         }
 
         // --------------------------
-        // FORMAT
-        // --------------------------
-        const format = async (id) => `<@${id}>`;
-
-        // --------------------------
-        // MESSAGE
+        // FORMAT RESULTS MESSAGE
         // --------------------------
         let msg = `# ${track.toUpperCase()} - ${isGP ? 'GRAND PRIX' : 'SPRINT'}\n\n`;
 
         participants.forEach((user, i) => {
-            msg += `P${i + 1}: ${user}${i === 0 && isSprint ? ' ⏱️ (POLE)' : ''}\n`;
+            const log = coinLog.find(c => c.user?.id === user.id);
+            const rewardStr = log ? ` *(+${log.coins} 🪙${log.boosted ? ' 🚀' : ''})*` : '';
+            msg += `P${i + 1}: ${user}${i === 0 && isSprint ? ' ⏱️ (POLE)' : ''}${rewardStr}\n`;
         });
 
         let lastPos = participants.length;
 
         for (const id of dnfList) {
             lastPos++;
-            msg += `P${lastPos}: ${await format(id)} (DNF)\n`;
+            msg += `P${lastPos}: <@${id}> (DNF) *(+${DNF_REWARD} 🪙)*\n`;
         }
 
         for (const id of dnsList) {
             lastPos++;
-            msg += `P${lastPos}: ${await format(id)} (DNS)\n`;
+            msg += `P${lastPos}: <@${id}> (DNS)\n`;
         }
 
         if (comments) {
