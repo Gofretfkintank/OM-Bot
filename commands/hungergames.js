@@ -97,7 +97,7 @@ module.exports = {
             .setTitle('⚔️ HUNGER GAMES — F1 Arena')
             .setDescription(
                 `**Welcome to the Arena!**\n\n` +
-                `Tributes so far:\n\( {game.tributes.map((t, i) => ` \){i + 1}. **${t.name}**`).join('\n')}\n\n` +
+                `Tributes so far:\n${game.tributes.map((t, i) => `${i + 1}. **${t.name}**`).join('\n')}\n\n` +
                 `Only **one** will survive.\n\n` +
                 `The simulation runs automatically — sit back and watch!`
             )
@@ -148,7 +148,16 @@ function formatEvent(template, actor, target) {
 function alive(game) { return game.tributes.filter(t => t.alive); }
 
 async function runSimulation(interaction, msg, game, delay) {
-    await msg.edit({ embeds: [new EmbedBuilder().setColor(0x8b0000).setTitle('🔫 THE CORNUCOPIA!').setDescription(`The tributes scatter! \( {alive(game).length} enter the arena...\n\n \){alive(game).map(t => `⚔️ **${t.name}**`).join('\n')}`).setFooter({ text: 'Let the games begin.' })], components: [] });
+    await msg.edit({ 
+        embeds: [
+            new EmbedBuilder()
+                .setColor(0x8b0000)
+                .setTitle('🔫 THE CORNUCOPIA!')
+                .setDescription(`The tributes scatter! ${alive(game).length} enter the arena...\n\n${alive(game).map(t => `⚔️ **${t.name}**`).join('\n')}`)
+                .setFooter({ text: 'Let the games begin.' })
+        ], 
+        components: [] 
+    });
     await new Promise(r => setTimeout(r, delay));
 
     const bloodbathKills = Math.max(0, Math.floor(alive(game).length * 0.2));
@@ -219,9 +228,9 @@ async function runSimulation(interaction, msg, game, delay) {
         .setColor(0xf5c518)
         .setTitle('🏆 WINNER OF THE HUNGER GAMES!')
         .setDescription(
-            `🎉 **\( {winner.name}** <@ \){winner.userId}> is the last tribute standing!\n\n` +
+            `🎉 **${winner.name}** <@${winner.userId}> is the last tribute standing!\n\n` +
             `**Final standings:**\n` +
-            `\( {game.tributes.map((t, i) => ` \){t.alive ? '🏆' : '☠️'} **${t.name}**`).reverse().join('\n')}`
+            `${game.tributes.map((t, i) => `${t.alive ? '🏆' : '☠️'} **${t.name}**`).reverse().join('\n')}`
         )
         .setFooter({ text: 'Olzhasstik Motorsports — Game Night' });
 
