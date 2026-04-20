@@ -8,7 +8,7 @@ const {
     ButtonStyle
 } = require('discord.js');
 
-// ── Event templates ───────────────────────────────────────────────────────────
+// Event templates
 const DAY_EVENTS = [
     '{0} finds a set of fresh tyres in the Supply Cache and bolts.',
     '{0} and {1} form a temporary alliance at the Paddock.',
@@ -92,7 +92,6 @@ module.exports = {
         };
         activeGames.set(interaction.guildId, game);
 
-        // ✅ Temiz lobbyEmbed
         const lobbyEmbed = () => new EmbedBuilder()
             .setColor(0x8b0000)
             .setTitle('⚔️ HUNGER GAMES — F1 Arena')
@@ -114,27 +113,14 @@ module.exports = {
 
         lobbyCollector.on('collect', async i => {
             if (i.customId === 'hg_join') {
-                if (game.tributes.find(t => t.userId === i.user.id)) 
-                    return i.reply({ content: '✅ Already a tribute!', ephemeral: true });
-                
-                if (game.tributes.length >= 24) 
-                    return i.reply({ content: '❌ Arena full (max 24 tributes).', ephemeral: true });
-
-                game.tributes.push({ 
-                    userId: i.user.id, 
-                    name: i.member?.displayName || i.user.username, 
-                    alive: true 
-                });
+                if (game.tributes.find(t => t.userId === i.user.id)) return i.reply({ content: '✅ Already a tribute!', ephemeral: true });
+                if (game.tributes.length >= 24) return i.reply({ content: '❌ Arena full (max 24 tributes).', ephemeral: true });
+                game.tributes.push({ userId: i.user.id, name: i.member?.displayName || i.user.username, alive: true });
                 await i.update({ embeds: [lobbyEmbed()] });
             }
-
             if (i.customId === 'hg_start') {
-                if (i.user.id !== game.hostId && i.user.id !== '1097807544849809408') 
-                    return i.reply({ content: '❌ Only host can start.', ephemeral: true });
-                
-                if (game.tributes.length < 2) 
-                    return i.reply({ content: '❌ At least 2 tributes needed!', ephemeral: true });
-
+                if (i.user.id !== game.hostId && i.user.id !== '1097807544849809408') return i.reply({ content: '❌ Only host can start.', ephemeral: true });
+                if (game.tributes.length < 2) return i.reply({ content: '❌ At least 2 tributes needed!', ephemeral: true });
                 lobbyCollector.stop('start');
                 await i.deferUpdate();
             }
@@ -143,10 +129,7 @@ module.exports = {
         lobbyCollector.on('end', async () => {
             if (game.tributes.length < 2) {
                 activeGames.delete(interaction.guildId);
-                return msg.edit({ 
-                    embeds: [new EmbedBuilder().setColor(0x555555).setTitle('❌ Hunger Games cancelled.')], 
-                    components: [] 
-                });
+                return msg.edit({ embeds: [new EmbedBuilder().setColor(0x555555).setTitle('❌ Hunger Games cancelled.')], components: [] });
             }
             game.phase = 'running';
             await runSimulation(interaction, msg, game, delay);
@@ -154,9 +137,7 @@ module.exports = {
     }
 };
 
-function pick(arr) { 
-    return arr[Math.floor(Math.random() * arr.length)]; 
-}
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 function formatEvent(template, actor, target) {
     return template
@@ -164,24 +145,12 @@ function formatEvent(template, actor, target) {
         .replaceAll('{1}', target ? `**${target.name}** ` : '**someone**');
 }
 
-function alive(game) { 
-    return game.tributes.filter(t => t.alive); 
-}
+function alive(game) { return game.tributes.filter(t => t.alive); }
 
 async function runSimulation(interaction, msg, game, delay) {
-    await msg.edit({
-        embeds: [new EmbedBuilder()
-            .setColor(0x8b0000)
-            .setTitle('🔫 THE CORNUCOPIA!')
-            .setDescription(`The tributes scatter! \( {alive(game).length} enter the arena...\n\n \){alive(game).map(t => `⚔️ **${t.name}**`).join('\n')}`)
-            .setFooter({ text: 'Let the games begin.' })
-        ], 
-        components: [] 
-    });
-
+    await msg.edit({ embeds: [new EmbedBuilder().setColor(0x8b0000).setTitle('🔫 THE CORNUCOPIA!').setDescription(`The tributes scatter! \( {alive(game).length} enter the arena...\n\n \){alive(game).map(t => `⚔️ **${t.name}**`).join('\n')}`).setFooter({ text: 'Let the games begin.' })], components: [] });
     await new Promise(r => setTimeout(r, delay));
 
-    // Opening bloodbath
     const bloodbathKills = Math.max(0, Math.floor(alive(game).length * 0.2));
     const openLog = ['**⚡ OPENING BLOODBATH:**'];
     for (let k = 0; k < bloodbathKills; k++) {
@@ -197,7 +166,6 @@ async function runSimulation(interaction, msg, game, delay) {
     await sendLog(interaction.channel, openLog.join('\n'), 0x8b0000);
     await new Promise(r => setTimeout(r, delay));
 
-    // Main loop
     while (alive(game).length > 1) {
         game.day++;
         const isNight = game.day % 2 === 0;
@@ -205,7 +173,6 @@ async function runSimulation(interaction, msg, game, delay) {
 
         const survivors = alive(game);
 
-        // Random events
         const eventCount = Math.max(1, Math.floor(survivors.length * 0.6));
         for (let e = 0; e < eventCount; e++) {
             const actor = pick(survivors);
@@ -215,7 +182,6 @@ async function runSimulation(interaction, msg, game, delay) {
             log.push(`• ${formatEvent(pick(templates), actor, target)}`);
         }
 
-        // Kill events
         const killCount = Math.max(1, Math.floor(survivors.length * 0.25));
         for (let k = 0; k < killCount; k++) {
             const current = alive(game);
@@ -226,7 +192,6 @@ async function runSimulation(interaction, msg, game, delay) {
             log.push(`☠️ ${formatEvent(pick(KILL_EVENTS), killer, victim)}`);
         }
 
-        // Announce fallen
         const fallen = game.tributes.filter(t => !t.alive && t._announced !== true);
         if (fallen.length) {
             log.push(`\n**☠️ Fallen this ${isNight ? 'night' : 'day'}:** ${fallen.map(t => t.name).join(', ')}`);
@@ -239,7 +204,6 @@ async function runSimulation(interaction, msg, game, delay) {
         await new Promise(r => setTimeout(r, delay * 1.5));
     }
 
-    // Final
     const [winner] = alive(game);
     const runnerUp = game.tributes.filter(t => t.userId !== winner.userId).pop();
 
@@ -269,12 +233,8 @@ async function sendLog(channel, text, color) {
     const lines = text.split('\n');
     let chunk = '';
     for (const line of lines) {
-        if ((chunk + '\n' + line).length > 1900) {
-            chunks.push(chunk);
-            chunk = line;
-        } else {
-            chunk += (chunk ? '\n' : '') + line;
-        }
+        if ((chunk + '\n' + line).length > 1900) { chunks.push(chunk); chunk = line; }
+        else chunk += (chunk ? '\n' : '') + line;
     }
     if (chunk) chunks.push(chunk);
 
