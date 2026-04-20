@@ -101,7 +101,7 @@ module.exports = {
             .setTitle('⚔️ HUNGER GAMES — F1 Arena')
             .setDescription(
                 `**Welcome to the Arena!**\n\n` +
-                `Tributes so far:\n${game.tributes.map((t, i) => `${i + 1}. **${t.name}**`).join('\n')}\n\n` +
+                `Tributes so far:\n\( {game.tributes.map((t, i) => ` \){i + 1}. **${t.name}**`).join('\n')}\n\n` +
                 `Only **one** will survive.\n\n` +
                 `The simulation runs automatically — sit back and watch!`
             )
@@ -143,14 +143,17 @@ module.exports = {
 
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
+// ✅ DÜZELTİLMİŞ FONKSİYON (eski regex hatası giderildi)
 function formatEvent(template, actor, target) {
-    return template.replace(/{0}/g, `**${actor.name}**`).replace(/{1}/g, target ? `**${target.name}** ` : '**someone**');
+    return template
+        .replaceAll('{0}', `**${actor.name}**`)
+        .replaceAll('{1}', target ? `**${target.name}** ` : '**someone**');
 }
 
 function alive(game) { return game.tributes.filter(t => t.alive); }
 
 async function runSimulation(interaction, msg, game, delay) {
-    await msg.edit({ embeds: [new EmbedBuilder().setColor(0x8b0000).setTitle('🔫 THE CORNUCOPIA!').setDescription(`The tributes scatter! ${alive(game).length} enter the arena...\n\n${alive(game).map(t => `⚔️ **${t.name}**`).join('\n')}`).setFooter({ text: 'Let the games begin.' })], components: [] });
+    await msg.edit({ embeds: [new EmbedBuilder().setColor(0x8b0000).setTitle('🔫 THE CORNUCOPIA!').setDescription(`The tributes scatter! \( {alive(game).length} enter the arena...\n\n \){alive(game).map(t => `⚔️ **${t.name}**`).join('\n')}`).setFooter({ text: 'Let the games begin.' })], components: [] });
     await new Promise(r => setTimeout(r, delay));
 
     // ── Opening bloodbath ────────────────────────────────────────────────────
@@ -227,9 +230,9 @@ async function runSimulation(interaction, msg, game, delay) {
         .setColor(0xf5c518)
         .setTitle('🏆 WINNER OF THE HUNGER GAMES!')
         .setDescription(
-            `🎉 **${winner.name}** <@${winner.userId}> is the last tribute standing!\n\n` +
+            `🎉 **\( {winner.name}** <@ \){winner.userId}> is the last tribute standing!\n\n` +
             `**Final standings:**\n` +
-            `${game.tributes.map((t, i) => `${t.alive ? '🏆' : '☠️'} **${t.name}**`).reverse().join('\n')}`
+            `\( {game.tributes.map((t, i) => ` \){t.alive ? '🏆' : '☠️'} **${t.name}**`).reverse().join('\n')}`
         )
         .setFooter({ text: 'Olzhasstik Motorsports — Game Night' });
 
