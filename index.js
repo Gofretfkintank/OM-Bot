@@ -34,6 +34,7 @@ const SeasonVote = require('./models/SeasonVote');
 const Maintenance = require('./models/Maintenance');
 const PrefixConfig = require('./models/PrefixConfig');
 const { onStartup: teamRadioStartup } = require('./commands/teamradio');
+const { checkExpiredInterviews }      = require('./commands/interview');
 
 //--------------------------
 // CLIENT
@@ -254,6 +255,12 @@ client.once('ready', async () => {
             console.error('AUTO LOOP ERROR:', err);
         }
     }, 15000);
+
+    //--------------------------
+    // INTERVIEW TIMEOUT LOOP
+    //--------------------------
+
+    setInterval(() => checkExpiredInterviews(client), 60_000);
 
     //--------------------------
     // DOTS / TOTS AUTO END LOOP
@@ -555,6 +562,28 @@ client.on('interactionCreate', async interaction => {
         const command = client.commands.get('teamradio');
         if (command && command.buttonHandler) {
             await command.buttonHandler(interaction);
+        }
+    }
+
+    //--------------------------
+    // INTERVIEW BUTTON SYSTEM
+    //--------------------------
+
+    else if (interaction.isButton() && interaction.customId.startsWith('interview_start_')) {
+        const command = client.commands.get('interview');
+        if (command && command.buttonHandler) {
+            await command.buttonHandler(interaction);
+        }
+    }
+
+    //--------------------------
+    // INTERVIEW MODAL SUBMIT
+    //--------------------------
+
+    else if (interaction.isModalSubmit() && interaction.customId.startsWith('interview_modal_')) {
+        const command = client.commands.get('interview');
+        if (command && command.modalHandler) {
+            await command.modalHandler(interaction);
         }
     }
 });
