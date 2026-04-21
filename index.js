@@ -28,6 +28,7 @@ mongoose.connect(process.env.MONGO_URI)
 //--------------------------
 
 const Driver = require('./models/Driver');
+const DriverRating = require('./models/DriverRating');
 const DotyVote = require('./models/DotyVote');
 const SeasonVote = require('./models/SeasonVote');
 const Maintenance = require('./models/Maintenance');
@@ -113,6 +114,26 @@ client.once('ready', async () => {
 
     // TeamRadio restart-safe scheduler
     await teamRadioStartup(client);
+
+    // Startup migration: DriverRating eksik olan Driver kayıtlarını düzelt
+    try {
+        const allDrivers = await Driver.find({}).lean();
+        const allRatings = await DriverRating.find({}, { userId: 1 }).lean();
+        const ratingSet = new Set(allRatings.map(r => r.userId));
+        const missing = allDrivers.filter(d => !ratingSet.has(d.userId));
+        if (missing.length > 0) {
+            console.log(`[MIGRATION] ${missing.length} driver için DriverRating eksik, oluşturuluyor...`);
+            for (const d of missing) {
+                await DriverRating.create({ userId: d.userId, username: d.username || '' });
+                console.log(`[MIGRATION] ✅ ${d.userId} (${d.username || 'username yok'})`);
+            }
+            console.log('[MIGRATION] ✅ Tamamlandı.');
+        } else {
+            console.log('[MIGRATION] ✅ Tüm driverların DriverRating kaydı mevcut.');
+        }
+    } catch (err) {
+        console.error('[MIGRATION] ❌ Hata:', err.message);
+    }
 
     try {
         await client.application.commands.set([]);
