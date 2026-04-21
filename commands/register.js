@@ -25,7 +25,7 @@ module.exports = {
 
             // Driver + DriverRating aynı anda oluştur
             await Promise.all([
-                Driver.create({ userId: user.id }),
+                Driver.create({ userId: user.id, username: user.username }),
                 DriverRating.create({ userId: user.id, username: user.username })
             ]);
 
