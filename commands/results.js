@@ -4,6 +4,7 @@ const {
 } = require('discord.js');
 
 const Driver  = require('../models/Driver');
+const DriverRating = require('../models/DriverRating');
 const Economy = require('../models/Economy');
 const Sponsor = require('../models/Sponsor');
 const { getSponsorById } = require('../data/sponsorCatalog');
@@ -18,9 +19,22 @@ const DNF_REWARD = 25;
 // --------------------------
 // GET / CREATE DRIVER
 // --------------------------
-async function getDriver(userId) {
+async function getDriver(userId, guild) {
     let driver = await Driver.findOne({ userId });
-    if (!driver) driver = await Driver.create({ userId });
+    if (!driver) {
+        let username = '';
+        try {
+            const member = guild?.members?.cache?.get(userId)
+                || await guild?.members?.fetch(userId).catch(() => null);
+            username = member?.user?.username || '';
+        } catch { username = ''; }
+
+        driver = await Driver.create({ userId, username });
+
+        // DriverRating de oluştur — yoksa Panel'de bozuk görünür
+        const existing = await DriverRating.findOne({ userId });
+        if (!existing) await DriverRating.create({ userId, username });
+    }
     return driver;
 }
 
@@ -112,7 +126,7 @@ module.exports = {
 
         // 2. ADIM: Veritabanı işlemleri (Döngü uzun sürebilir)
         for (const [index, user] of participants.entries()) {
-            const driver = await getDriver(user.id);
+            const driver = await getDriver(user.id, interaction.guild);
             const wallet = await getWallet(user.id);
 
             if (isGP) driver.races++;
@@ -167,7 +181,7 @@ module.exports = {
         const dnsList = parseIds(interaction.options.getString('dns'), interaction);
 
         for (const id of dnfList) {
-            const driver = await getDriver(id);
+            const driver = await getDriver(id, interaction.guild);
             driver.dnf++;
             if (!participantIds.includes(id) && isGP) driver.races++;
 
@@ -191,7 +205,7 @@ module.exports = {
         }
 
         for (const id of dnsList) {
-            const driver = await getDriver(id);
+            const driver = await getDriver(id, interaction.guild);
             driver.dns++;
             await driver.save();
         }
