@@ -274,6 +274,14 @@ async function modalHandler(interaction) {
         return interaction.editReply({ content: '❌ Session not found or already completed.' });
     }
 
+    // Guild may be null if modal was submitted from a DM — fetch via client
+    const guild = interaction.guild
+        || await interaction.client.guilds.fetch(session.guildId).catch(() => null);
+
+    if (!guild) {
+        return interaction.editReply({ content: '❌ Could not resolve server. Please contact an admin.' });
+    }
+
     // Collect answers
     const answers = session.questions.map((_, i) =>
         interaction.fields.getTextInputValue(`answer_${i}`)
@@ -295,8 +303,8 @@ async function modalHandler(interaction) {
         try {
             const reportChannelId = process.env.REPORT_LOG_ID;
             const reportChannel   = reportChannelId
-                ? (interaction.guild.channels.cache.get(reportChannelId)
-                    || await interaction.guild.channels.fetch(reportChannelId).catch(() => null))
+                ? (guild.channels.cache.get(reportChannelId)
+                    || await guild.channels.fetch(reportChannelId).catch(() => null))
                 : null;
 
             if (reportChannel) {
@@ -360,8 +368,8 @@ async function modalHandler(interaction) {
 
     // ── Disable button on original announcement message ──────────────────────
     try {
-        const ch = interaction.guild.channels.cache.get(session.channelId)
-            || await interaction.guild.channels.fetch(session.channelId).catch(() => null);
+        const ch = guild.channels.cache.get(session.channelId)
+            || await guild.channels.fetch(session.channelId).catch(() => null);
         if (ch && session.messageId) {
             const msg = await ch.messages.fetch(session.messageId).catch(() => null);
             if (msg) await msg.edit({ components: [] }).catch(() => {});
@@ -371,14 +379,14 @@ async function modalHandler(interaction) {
     }
 
     // ── Publish answers to channel (clean — no flag indicator visible) ────────
-    const channel = interaction.guild.channels.cache.get(session.channelId)
-        || await interaction.guild.channels.fetch(session.channelId).catch(() => null);
+    const channel = guild.channels.cache.get(session.channelId)
+        || await guild.channels.fetch(session.channelId).catch(() => null);
 
     if (channel) {
         const responseEmbed = new EmbedBuilder()
             .setColor(0x1DB954)
             .setTitle(`🎤 Post-Race Interview — ${session.trackName}`)
-            .setDescription(`<@${session.userId}> is at the microphone.`)
+            .setDescription(`An anonymous driver is at the microphone.`)
             .addFields(
                 ...session.questions.map((q, i) => ({
                     name:  `❓ ${q}`,
@@ -499,6 +507,7 @@ module.exports = {
                 userId:    chosenId,
                 questions,
                 channelId: interaction.channelId,
+                guildId:   interaction.guildId,
                 expiresAt: new Date(Date.now() + TIMEOUT_MS),
             });
 
@@ -509,24 +518,52 @@ module.exports = {
                     .setStyle(ButtonStyle.Primary)
             );
 
-            const announceEmbed = new EmbedBuilder()
+            // ── DM the selected driver with the button (keeps identity private) ──
+            const dmEmbed = new EmbedBuilder()
                 .setColor(0x5865F2)
                 .setTitle(`🎤 Post-Race Interview — ${track.toUpperCase()}`)
                 .setDescription(
-                    `<@${chosenId}>, the media wants a word with you.\n\n` +
-                    `You have been selected for the post-race interview.\n` +
+                    `The media wants a word with you.\n\n` +
+                    `You have been selected for the post-race interview at **${track}**.\n` +
                     `Click the button below to begin. You have **15 minutes** to respond.\n\n` +
                     `*Ignoring this interview will result in a **Media Silence Fine** of \`${MEDIA_SILENCE_FINE} 🪙\`.*`
                 )
                 .setFooter({ text: 'OM Media Obligations System • Brought to you by OM Bot' })
                 .setTimestamp();
 
+            let dmSent = false;
+            try {
+                const dmMsg = await chosenUser.send({
+                    embeds:     [dmEmbed],
+                    components: [row],
+                });
+                session.messageId = dmMsg.id;
+                dmSent = true;
+            } catch {
+                // DMs closed — fall back to channel ping (unavoidable identity reveal)
+                dmSent = false;
+            }
+
+            // ── Public channel: anonymous announcement ────────────────────────
+            const publicEmbed = new EmbedBuilder()
+                .setColor(0x5865F2)
+                .setTitle(`🎤 Post-Race Interview — ${track.toUpperCase()}`)
+                .setDescription(
+                    dmSent
+                        ? `A driver has been selected for the post-race interview at **${track}**.\n*The selected driver has been contacted via DM — they have **15 minutes** to respond.*`
+                        : `<@${chosenId}>, the media wants a word with you.\n\nClick the button below to begin. You have **15 minutes** to respond.\n\n*Ignoring this interview will result in a **Media Silence Fine** of \`${MEDIA_SILENCE_FINE} 🪙\`.*`
+                )
+                .setFooter({ text: 'OM Media Obligations System • Brought to you by OM Bot' })
+                .setTimestamp();
+
             const sentMsg = await interaction.editReply({
-                embeds:     [announceEmbed],
-                components: [row],
+                embeds:     [publicEmbed],
+                components: dmSent ? [] : [row],
             });
 
-            session.messageId = sentMsg.id;
+            if (!dmSent) {
+                session.messageId = sentMsg.id;
+            }
             await session.save();
         }
     },
