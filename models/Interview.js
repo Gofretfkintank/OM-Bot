@@ -6,44 +6,47 @@ const mongoose = require('mongoose');
 
 const interviewSchema = new mongoose.Schema({
 
-    // Her session için unique ID (customId olarak kullanılır)
+    // Unique ID per session (used as customId)
     sessionId: { type: String, required: true, unique: true },
 
-    // Hangi track için
+    // Track name
     trackName: { type: String, required: true },
 
-    // Seçilen pilot
+    // Selected driver
     userId: { type: String, required: true },
 
-    // Oturum durumu
-    // pending → buton gönderildi, bekleniyor
-    // done    → tamamlandı
-    // fined   → timeout oldu, ceza verildi
+    // Session status
+    // pending → button sent, waiting
+    // done    → completed
+    // fined   → timed out, fine issued
     status: {
-        type: String,
-        enum: ['pending', 'done', 'fined'],
-        default: 'pending'
+        type:    String,
+        enum:    ['pending', 'done', 'fined'],
+        default: 'pending',
     },
 
-    // Sorulan 3 soru (havuzdan random çekilmiş)
+    // 3 questions drawn from the pool
     questions: { type: [String], default: [] },
 
-    // Pilotun verdiği yanıtlar
+    // Driver's answers
     answers: { type: [String], default: [] },
 
-    // Yanıt sızdı mı?
+    // Was the interview leaked?
     leaked: { type: Boolean, default: false },
 
-    // Argo tespit edildi mi?
+    // Was profanity detected?
     flagged: { type: Boolean, default: false },
 
-    // Message ID (butonlu mesaj — timeout için)
+    // Message ID of the button message (for timeout cleanup)
     messageId: { type: String, default: null },
 
-    // Kanal ID'si
+    // Channel ID where the interview was started
     channelId: { type: String, default: null },
 
-    // Timeout tarihi (pending'dan 15 dk sonra)
+    // Guild ID — needed to resolve guild when modal is submitted from a DM
+    guildId: { type: String, default: null },
+
+    // Expiry time (15 min after pending)
     expiresAt: { type: Date, default: null },
 
 }, { timestamps: true });
