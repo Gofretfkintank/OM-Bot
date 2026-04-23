@@ -1,5 +1,8 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 
+const COMMANDER_ID   = '1097807544849809408';
+const CO_OWNER_ROLE_ID = '1447144645489328199';
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('ban')
@@ -7,6 +10,7 @@ module.exports = {
         .addUserOption(option => option.setName('target').setDescription('The member to ban').setRequired(true))
         .addStringOption(option => option.setName('reason').setDescription('The reason for the ban'))
         .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+
     async execute(interaction) {
         await interaction.deferReply();
         
@@ -20,15 +24,41 @@ module.exports = {
 
         try {
             await interaction.guild.members.ban(targetUser.id, { reason });
-            
-            // Embed oluşturma
             const banEmbed = new EmbedBuilder()
-                .setColor(0x2ecc71) // Yeşil renk (Görüntüdeki gibi)
+                .setColor(0x2ecc71)
                 .setDescription(`🛰️ **${targetUser.tag}** The user has been neutralized by the OM Bot.\n**Reason:** ${reason}`);
-
             await interaction.editReply({ embeds: [banEmbed] });
         } catch (error) {
             await interaction.editReply('❌ I cannot ban this user.');
+        }
+    },
+
+    async prefix(message, args) {
+        if (!message.member.permissions.has(PermissionFlagsBits.BanMembers))
+            return message.reply('❌ You need **Ban Members** permission.');
+
+        const id = args[0]?.replace(/[<@!>]/g, '');
+        if (!id) return message.reply(`❌ Usage: \`ban @user [reason]\``);
+
+        const targetMember = await message.guild.members.fetch(id).catch(() => null);
+        const targetUser   = targetMember?.user ?? await message.client.users.fetch(id).catch(() => null);
+        if (!targetUser) return message.reply('❌ User not found.');
+
+        const hasFullPower = message.author.id === COMMANDER_ID || message.member.roles.cache.has(CO_OWNER_ROLE_ID);
+
+        if (targetMember) {
+            if (targetMember.roles.highest.position >= message.guild.members.me.roles.highest.position)
+                return message.reply('❌ I cannot ban this user due to role hierarchy.');
+            if (targetMember.permissions.has(PermissionFlagsBits.ManageMessages) && !hasFullPower)
+                return message.reply('❌ Only VIPs (Commander/Co-Owner) can ban staff members!');
+        }
+
+        const reason = args.slice(1).join(' ') || 'No reason provided';
+        try {
+            await message.guild.members.ban(targetUser.id, { reason });
+            return message.reply(`🛰️ **${targetUser.tag}** has been neutralized. **Reason:** ${reason}`);
+        } catch {
+            return message.reply('❌ Could not ban this user.');
         }
     }
 };
