@@ -602,11 +602,11 @@ http.createServer((req, res) => {
     console.log(`📡 Heartbeat server listening on port ${process.env.PORT || 3000}`);
 });
 
+
 //--------------------------
 // PREFIX CACHE
 //--------------------------
 
-// RAM'de tutuyoruz → her mesajda DB sorgusu atmamak için
 const prefixCache = new Map();
 const DEFAULT_PREFIX = 'om!';
 
@@ -618,7 +618,6 @@ async function getPrefix(guildId) {
     return prefix;
 }
 
-// setprefix komutu prefix'i değiştirince cache'i temizle
 client.on('prefixUpdate', (guildId) => {
     prefixCache.delete(guildId);
 });
@@ -633,31 +632,91 @@ client.on('messageCreate', async message => {
     if (!allowedGuilds.includes(message.guildId)) return;
 
     const prefix = await getPrefix(message.guildId);
-
     if (!message.content.toLowerCase().startsWith(prefix.toLowerCase())) return;
 
     const args = message.content.slice(prefix.length).trim().split(/\s+/);
     const commandName = args.shift().toLowerCase();
 
-    // ---- Komutlar ----
-
+    // ── Ping ───────────────────────────────────────────────────────────────
     if (commandName === 'ping') {
         const latency = Date.now() - message.createdTimestamp;
-        return message.reply(`🏓 Pong! \`${latency}ms\` | API: \`${client.ws.ping}ms\``);
+        return message.reply(`🏓 Pong! \`${latency}ms\` | API: \`${message.client.ws.ping}ms\``);
     }
 
+    // ── Prefix info ────────────────────────────────────────────────────────
     if (commandName === 'prefix') {
         return message.reply(`📌 Current prefix: \`${prefix}\`\nChange it with \`/setprefix\``);
     }
 
+    // ── Help ───────────────────────────────────────────────────────────────
     if (commandName === 'help') {
         return message.reply(
-            `**OM-Bot Prefix Commands** (prefix: \`${prefix}\`)\n` +
+            `**OM-Bot Prefix Commands** (prefix: \`${prefix}\`)\n\n` +
+            `**General**\n` +
             `\`${prefix}ping\` — Latency check\n` +
-            `\`${prefix}prefix\` — Show current prefix\n` +
-            `\`${prefix}help\` — This message\n\n` +
+            `\`${prefix}prefix\` — Show current prefix\n\n` +
+            `**Moderation** *(staff only)*\n` +
+            `\`${prefix}ban @user [reason]\` — Ban a member\n` +
+            `\`${prefix}unban <id>\` — Unban by user ID\n` +
+            `\`${prefix}kick @user\` — Kick a member\n` +
+            `\`${prefix}mute @user <10m/1h/1d> [reason]\` — Timeout a member\n` +
+            `\`${prefix}unmute @user\` — Remove timeout\n` +
+            `\`${prefix}to @user\` — Quick 10-minute timeout\n` +
+            `\`${prefix}unto @user\` — Remove quick timeout\n` +
+            `\`${prefix}warn @user <reason>\` — Issue a warning\n` +
+            `\`${prefix}warnings @user\` — View warnings\n` +
+            `\`${prefix}clearwarnings @user\` — Clear all warnings\n` +
+            `\`${prefix}nick @user <new name>\` — Change nickname\n` +
+            `\`${prefix}dm @user <message>\` — Send DM via bot\n` +
+            `\`${prefix}report @user <reason>\` — Report a user\n` +
+            `\`${prefix}lockchannel\` — Lock current channel\n` +
+            `\`${prefix}unlockchannel\` — Unlock current channel\n` +
+            `\`${prefix}slowmode <seconds>\` — Set slowmode\n\n` +
+            `**Role Management** *(admin only)*\n` +
+            `\`${prefix}addrole <n> [#color]\` — Create a role\n` +
+            `\`${prefix}delrole @role\` — Delete a role\n` +
+            `\`${prefix}editrole @role <new name>\` — Rename a role\n` +
+            `\`${prefix}giverole @user @role\` — Assign role to member\n` +
+            `\`${prefix}takerole @user @role\` — Remove role from member\n\n` +
             `*All other commands are slash commands. Type \`/\` to see them.*`
         );
+    }
+
+    // ── Moderasyon & rol komutları → her biri kendi dosyasında ────────────
+    // Prefix komut adı → slash komut adı eşlemesi
+    const prefixAliasMap = {
+        'ban':           'ban',
+        'unban':         'unban',
+        'kick':          'kick',
+        'mute':          'mute',
+        'unmute':        'unmute',
+        'to':            'to',
+        'unto':          'unto',
+        'warn':          'warn',
+        'warnings':      'warnings',
+        'clearwarnings': 'clear-warning',
+        'nick':          'nick',
+        'dm':            'dm',
+        'report':        'report',
+        'lockchannel':   'lockchannel',
+        'unlockchannel': 'unlockchannel',
+        'slowmode':      'slowmode',
+        'addrole':       'addrole',
+        'delrole':       'delrole',
+        'editrole':      'editrole',
+        'giverole':      'give-role',
+        'takerole':      'take-role',
+    };
+
+    const slashName = prefixAliasMap[commandName];
+    if (slashName) {
+        const cmd = client.commands.get(slashName);
+        if (cmd?.prefix) {
+            return cmd.prefix(message, args).catch(err => {
+                console.error(`[PREFIX ERROR] ${commandName}:`, err);
+                message.reply('❌ An error occurred while executing this command.').catch(() => {});
+            });
+        }
     }
 });
 
