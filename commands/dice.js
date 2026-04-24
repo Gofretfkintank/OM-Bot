@@ -22,8 +22,8 @@ module.exports = {
             opt.setName('bet')
                 .setDescription('Amount of coins to bet')
                 .setRequired(true)
-                .setMinValue(10)
-                .setMaxValue(2000)
+                .setMinValue(100)
+                .setMaxValue(20000)
         )
         .addIntegerOption(opt =>
             opt.setName('sides')
