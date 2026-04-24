@@ -1,4 +1,7 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+
+function ok(desc)  { return new EmbedBuilder().setColor(0x2ecc71).setDescription(desc); }
+function err(desc) { return new EmbedBuilder().setColor(0xe74c3c).setDescription(desc); }
 
 async function lockChannel(channel, guild) {
     const nonStaff = guild.roles.cache.filter(r =>
@@ -14,19 +17,27 @@ async function lockChannel(channel, guild) {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('lockchannel')
-        .setDescription('🔒 Lock the channel from all non-staff roles.')
+        .setDescription('Lock the channel from all non-staff roles.')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 
     async execute(interaction) {
         await interaction.deferReply();
         await lockChannel(interaction.channel, interaction.guild);
-        await interaction.editReply('🛡️ **Channel Locked!** All non-staff roles have been restricted. 🔒');
+        await interaction.editReply({ embeds: [
+            ok(`🔒 **Channel Locked!** All non-staff roles have been restricted.`)
+                .setFooter({ text: `Locked by ${interaction.user.tag}` })
+                .setTimestamp()
+        ]});
     },
 
     async prefix(message) {
         if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels))
-            return message.reply('❌ You need **Manage Channels** permission.');
+            return message.reply({ embeds: [err('❌ You need **Manage Channels** permission.')] });
         await lockChannel(message.channel, message.guild);
-        return message.reply('🔒 **Channel Locked!** All non-staff roles have been restricted.');
+        return message.reply({ embeds: [
+            ok(`🔒 **Channel Locked!** All non-staff roles have been restricted.`)
+                .setFooter({ text: `Locked by ${message.author.tag}` })
+                .setTimestamp()
+        ]});
     }
 };
