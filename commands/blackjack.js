@@ -98,8 +98,8 @@ module.exports = {
             opt.setName('bet')
                 .setDescription('Amount of coins to bet')
                 .setRequired(true)
-                .setMinValue(10)
-                .setMaxValue(5000)
+                .setMinValue(100)
+                .setMaxValue(50000)
         ),
 
     async execute(interaction) {
