@@ -73,8 +73,8 @@ module.exports = {
             opt.setName('bet')
                 .setDescription('Amount of coins to bet')
                 .setRequired(true)
-                .setMinValue(10)
-                .setMaxValue(3000)
+                .setMinValue(100)
+                .setMaxValue(30000)
         )
         .addStringOption(opt =>
             opt.setName('type')
