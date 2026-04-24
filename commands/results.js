@@ -11,11 +11,16 @@ const { getSponsorById } = require('../data/sponsorCatalog');
 const { CHAOS_POOL }     = require('./chaoscall');
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  COIN REWARDS BY POSITION
+//  COIN REWARDS BY POSITION  (1 F1 point = 1 000 coins)
+//
+//  GP points:     P1=25  P2=18  P3=15  P4=12  P5=10
+//                 P6=8   P7=6   P8=4   P9=2   P10=1   P11+=0
+//  Sprint points: P1=8   P2=7   P3=6   P4=5   P5=4
+//                 P6=3   P7=2   P8=1   P9+=0
 // ─────────────────────────────────────────────────────────────────────────────
-const GP_REWARDS     = [500, 350, 250, 175, 150, 125, 75, 75, 75, 75];
-const SPRINT_REWARDS = GP_REWARDS.map(v => Math.floor(v / 2));
-const DNF_REWARD     = 25;
+const GP_REWARDS     = [25000, 18000, 15000, 12000, 10000, 8000, 6000, 4000, 2000, 1000];
+const SPRINT_REWARDS = [8000,  7000,  6000,  5000,  4000,  3000, 2000, 1000];
+const DNF_REWARD     = 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  CHAOS MODIFIER — applies to the base reward table
