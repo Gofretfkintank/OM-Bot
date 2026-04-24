@@ -1,4 +1,7 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+
+function ok(desc)  { return new EmbedBuilder().setColor(0x2ecc71).setDescription(desc); }
+function err(desc) { return new EmbedBuilder().setColor(0xe74c3c).setDescription(desc); }
 
 async function unlockChannel(channel, guild) {
     const nonStaff = guild.roles.cache.filter(r =>
@@ -14,19 +17,27 @@ async function unlockChannel(channel, guild) {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('unlockchannel')
-        .setDescription('🔓 Unlock the channel and reset all role restrictions.')
+        .setDescription('Unlock the channel and reset all role restrictions.')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 
     async execute(interaction) {
         await interaction.deferReply();
         await unlockChannel(interaction.channel, interaction.guild);
-        await interaction.editReply('🔓 **Channel Unlocked!** All role restrictions have been cleared and chat is open. 🗣️');
+        await interaction.editReply({ embeds: [
+            ok(`🔓 **Channel Unlocked!** Chat is open again.`)
+                .setFooter({ text: `Unlocked by ${interaction.user.tag}` })
+                .setTimestamp()
+        ]});
     },
 
     async prefix(message) {
         if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels))
-            return message.reply('❌ You need **Manage Channels** permission.');
+            return message.reply({ embeds: [err('❌ You need **Manage Channels** permission.')] });
         await unlockChannel(message.channel, message.guild);
-        return message.reply('🔓 **Channel Unlocked!** Chat is open again.');
+        return message.reply({ embeds: [
+            ok(`🔓 **Channel Unlocked!** Chat is open again.`)
+                .setFooter({ text: `Unlocked by ${message.author.tag}` })
+                .setTimestamp()
+        ]});
     }
 };
