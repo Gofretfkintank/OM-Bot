@@ -32,7 +32,7 @@ const SHOP_ITEMS = [
         id: 'role_bronze',
         name: '🟫 Bronze Driver',
         description: 'Special Bronze colored driver role.',
-        price: 500,
+        price: 5000,
         type: 'role',
         roleId: process.env.SHOP_ROLE_BRONZE,  // Pulled from .env
         emoji: '🟫'
@@ -41,7 +41,7 @@ const SHOP_ITEMS = [
         id: 'role_silver',
         name: '⬜ Silver Driver',
         description: 'Special Silver colored driver role.',
-        price: 1000,
+        price: 10000,
         type: 'role',
         roleId: process.env.SHOP_ROLE_SILVER,
         emoji: '⬜'
@@ -50,7 +50,7 @@ const SHOP_ITEMS = [
         id: 'role_gold',
         name: '🟨 Gold Driver',
         description: 'Special Gold colored driver role. A symbol of prestige.',
-        price: 2000,
+        price: 20000,
         type: 'role',
         roleId: process.env.SHOP_ROLE_GOLD,
         emoji: '🟨'
@@ -59,7 +59,7 @@ const SHOP_ITEMS = [
         id: 'role_champion',
         name: '👑 Champion Aura',
         description: 'The most prestigious OM role. Only for the elite.',
-        price: 5000,
+        price: 50000,
         type: 'role',
         roleId: process.env.SHOP_ROLE_CHAMPION,
         emoji: '👑'
@@ -70,7 +70,7 @@ const SHOP_ITEMS = [
         id: 'boost_race',
         name: '🚀 Race Boost',
         description: 'Your coin rewards increase by 50% in the next race. One-time use.',
-        price: 300,
+        price: 3000,
         type: 'boost',
         emoji: '🚀'
     },
@@ -80,7 +80,7 @@ const SHOP_ITEMS = [
         id: 'flex_pitwall',
         name: '🎙️ Pit Wall Pass',
         description: 'Burn coins, gain status. Does nothing but looks good on the leaderboard.',
-        price: 750,
+        price: 7500,
         type: 'flex',
         emoji: '🎙️'
     },
@@ -88,7 +88,7 @@ const SHOP_ITEMS = [
         id: 'flex_helmet',
         name: '🪖 Signed Helmet',
         description: 'Collector\'s item. You are recorded as a part of OM history.',
-        price: 1500,
+        price: 15000,
         type: 'flex',
         emoji: '🪖'
     }
