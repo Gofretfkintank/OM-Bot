@@ -86,8 +86,8 @@ module.exports = {
                     opt.setName('amount')
                         .setDescription('Amount to wager')
                         .setRequired(true)
-                        .setMinValue(10)
-                        .setMaxValue(10000)
+                        .setMinValue(100)
+                        .setMaxValue(100000)
                 )
         )
 
