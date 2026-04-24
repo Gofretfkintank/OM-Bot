@@ -21,8 +21,8 @@ const BOTS_CHANNEL_ID   = '1452733309724393664';
 const LEVELS_CHANNEL_ID = '1452948024299884670';
 
 // ── Ödül miktarları ────────────────────────────────────────────────────────
-const COINS_PER_CATCH = 25;  // Madcardex / Ballsdex / F1dex catch
-const COINS_PER_LEVEL = 50;  // Her yeni Arcane lap
+const COINS_PER_CATCH = 250;  // 10x scaled  // Madcardex / Ballsdex / F1dex catch
+const COINS_PER_LEVEL = 500;  // 10x scaled  // Her yeni Arcane lap
 
 // ── Anti-spam cooldown (ms) ────────────────────────────────────────────────
 const BOTS_COOLDOWN_MS = 30_000; // 30 saniye
