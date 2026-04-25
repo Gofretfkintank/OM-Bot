@@ -6,46 +6,112 @@ module.exports = {
         .setDescription('Explore all available commands by category.'),
 
     async execute(interaction) {
-        const commands = interaction.client.commands;
 
         //--------------------------
-        // KEYWORD MAPPER
+        // STATIC CATEGORY MAP
         //--------------------------
         const categories = {
-            '🏁 Racing & League': [],
-            '🛠️ Moderation': [],
-            '⚙️ System & Utility': [],
-            '📊 Stats & Votes': []
+
+            '🏁 Racing & League': [
+                '**`/register`** — Register yourself to the racing league database.',
+                '**`/results`** — Post race results, update statistics, and distribute coins.',
+                '**`/driversfix`** — Edit driver stats manually.',
+                '**`/race-set`** — Manually start a race countdown timer.',
+                '**`/race-delay`** — Delay an active race timer.',
+                '**`/race-guess`** — Predict the race winner before results drop.',
+                '**`/racetime`** — Convert race time (6 PM PKT) to any local timezone.',
+                '**`/track`** — Get detailed info about any motorsport circuit.',
+                '**`/leaderboard`** — View driver rankings based on overall rating.',
+                '**`/stats`** — Show racing statistics for yourself or another driver.',
+                '**`/vs`** — Compare two drivers head to head.',
+            ],
+
+            '💰 Economy': [
+                '**`/wallet`** — Check your coin balance and economy stats.',
+                '**`/coinboard`** — See the richest 10 drivers on the server.',
+                '**`/shop`** — Browse and purchase items from the OM Economy Shop.',
+                '**`/sponsor`** — View sponsor offers and sign deals for coins.',
+                '**`/give-coins`** — *(Admin)* Add, remove, or set coins for a driver.',
+            ],
+
+            '🎰 Casino': [
+                '**`/blackjack`** — Play a hand of blackjack against the dealer.',
+                '**`/slots`** — Spin the OM slot machine.',
+                '**`/coinflip`** — Flip a coin — double or nothing.',
+                '**`/dice`** — Roll dice against the house. Highest roll wins.',
+                '**`/roulette`** — Spin the European roulette wheel.',
+                '**`/crash`** — Bet on the crash multiplier before it collapses.',
+                '**`/bet`** — Open or join a race betting pool.',
+            ],
+
+            '📊 Stats & Votes': [
+                '**`/dots`** — Vote for the Driver of the Season (DOTS).',
+                '**`/tots`** — Vote for the Team of the Season (TOTS).',
+                '**`/dotyvote`** — *(Admin)* Start a DOTY vote between selected drivers.',
+                '**`/vote`** — Start an advanced custom poll.',
+                '**`/vote-remove`** — Delete a poll message by its ID.',
+                '**`/report`** — Report a user to the staff team.',
+            ],
+
+            '🛠️ Moderation': [
+                '**`/ban`** — Ban a member from the server.',
+                '**`/unban`** — Unban a user by their ID.',
+                '**`/kick`** — Kick a member from the server.',
+                '**`/mute`** — Mute a member using Discord timeout.',
+                '**`/unmute`** — Remove timeout from a member.',
+                '**`/to`** — Quick 10-minute timeout for a member.',
+                '**`/unto`** — Quickly remove a timeout from a member.',
+                '**`/warn`** — Issue a warning to a member.',
+                '**`/warnings`** — View all active warnings for a member.',
+                '**`/clear-warning`** — Clear all warnings for a member.',
+                '**`/jail`** — Quarantine a user (restrict to jail channel).',
+                '**`/unjail`** — Release a user from quarantine.',
+                '**`/setupjail`** — Apply the full jail system to the server.',
+                '**`/lockchannel`** — Lock a channel from all non-staff roles.',
+                '**`/unlockchannel`** — Unlock a channel and reset role restrictions.',
+                '**`/slowmode`** — Set a channel slowmode/ratelimit (in seconds).',
+                '**`/nick`** — Change a member\'s nickname.',
+                '**`/addrole`** — Create a new role in the server.',
+                '**`/delrole`** — Delete an existing role from the server.',
+                '**`/editrole`** — Rename an existing role.',
+                '**`/give-role`** — Assign a role to a member.',
+                '**`/take-role`** — Remove a role from a member.',
+                '**`/dm`** — Send a direct message to a user as the bot.',
+                '**`/teamradio`** — Toggle FIA team radio access for the server.',
+            ],
+
+            '🎮 Mini-Games': [
+                '**`/dragrace`** — 🏎️ Drag Race — Mash the button and cross the finish line first!',
+                '**`/redlights`** — 🔴 5 Red Lights — F1 start reaction race.',
+                '**`/caption`** — 📝 Caption This! — Write the funniest caption and let the server vote.',
+                '**`/chaoscall`** — 🎲 Draw a random Chaos Call for the mid-season.',
+                '**`/gartic`** — 🎨 Gartic — Describe a word using ONLY emojis, others guess!',
+                '**`/hangman`** — 🪓 Hangman — Guess the word before time runs out.',
+                '**`/hungergames`** — ⚔️ Hunger Games — Enter as tributes, watch the story unfold.',
+                '**`/interview`** — 🎙️ Anonymous driver interview — answer questions from the grid.',
+                '**`/jenga`** — 🧱 Jenga — Pull blocks without toppling the tower. (2-8 players)',
+                '**`/keeptalking`** — 💣 Keep Talking — Co-op bomb defusal. One defuser, the rest are experts.',
+                '**`/millionaire`** — 💰 Who Wants to Be a Millionaire? — Team voting, lifelines, 15 questions.',
+                '**`/monopoly`** — 🏁 OM Monopoly — Buy circuits, collect rent, bankrupt your rivals. (2-6 players)',
+                '**`/numguess`** — 🔢 Number Guess Battle — Guess closest to win!',
+                '**`/trivia`** — 🧠 F1 Trivia Quiz — Test your motorsport knowledge.',
+                '**`/whosaidit`** — 🕵️ Who Said It? — Guess who wrote the server message.',
+                '**`/feign`** — 🎭 Feign — Social deduction game! Find the impostor. (3-8 players)',
+            ],
+
+            '⚙️ System & Utility': [
+                '**`/help`** — Display this command guide.',
+                '**`/ping`** — Check the bot\'s current latency.',
+                '**`/maintenance`** — *(Admin)* Toggle bot maintenance mode.',
+                '**`/setprefix`** — *(Admin)* Change the bot prefix for this server.',
+            ],
         };
-
-        commands.forEach((cmd) => {
-            const name = cmd.data.name;
-            const desc = cmd.data.description || 'No description provided.';
-            const line = `**/${name}** - ${desc}`;
-
-            if (['race-delay', 'race-set', 'racetime', 'track', 'results', 'driversfix', 'register'].some(k => name.includes(k))) {
-                categories['🏁 Racing & League'].push(line);
-            }
-            else if (['ban', 'kick', 'mute', 'warn', 'role', 'channel', 'slowmode', 'jail', 'quarantina', 'clear', 'to', 'nick'].some(k => name.includes(k))) {
-                categories['🛠️ Moderation'].push(line);
-            }
-            else if (['stats', 'vote', 'doty', 'vs', 'warnings'].some(k => name.includes(k))) {
-                categories['📊 Stats & Votes'].push(line);
-            }
-            else {
-                categories['⚙️ System & Utility'].push(line);
-            }
-        });
-
-        Object.keys(categories).forEach(key => {
-            if (categories[key].length === 0) delete categories[key];
-        });
 
         //--------------------------
         // UI COMPONENTS
         //--------------------------
         const options = Object.keys(categories).map(cat => ({
-            label: cat.split(' ').slice(1).join(' '), 
+            label: cat.split(' ').slice(1).join(' '),
             value: cat,
             emoji: cat.split(' ')[0],
             description: `View commands for ${cat.split(' ').slice(1).join(' ')}.`
@@ -62,9 +128,12 @@ module.exports = {
             .setColor(0x00D2FF)
             .setTitle('Olzhasstik Motorsports | Help Center')
             .setDescription(
-                "Welcome to the official command manual. Select a category from the menu below to see the available tools for our racing league and server management."
+                "Welcome to the official command manual. Select a category from the menu below to explore all available tools for our racing league and server management."
             )
-            .addFields({ name: 'System Status', value: '🟢 All systems operational', inline: true })
+            .addFields(
+                { name: '📁 Categories', value: Object.keys(categories).join('\n'), inline: true },
+                { name: 'System Status', value: '🟢 All systems operational', inline: true }
+            )
             .setFooter({ text: 'Olzhasstik Motorsports | System Manual' })
             .setTimestamp();
 
@@ -73,9 +142,9 @@ module.exports = {
         //--------------------------
         // COLLECTOR
         //--------------------------
-        const collector = response.createMessageComponentCollector({ 
-            componentType: ComponentType.StringSelect, 
-            time: 120000 
+        const collector = response.createMessageComponentCollector({
+            componentType: ComponentType.StringSelect,
+            time: 120000
         });
 
         collector.on('collect', async i => {
@@ -87,10 +156,10 @@ module.exports = {
             const cmdList = categories[selected].join('\n');
 
             const categoryEmbed = new EmbedBuilder()
-                .setColor(0x2f3136) // Daha koyu, profesyonel bir gri tonu
+                .setColor(0x2f3136)
                 .setTitle(`${selected}`)
                 .setDescription(cmdList)
-                .setFooter({ text: 'Use /command name to get more info' })
+                .setFooter({ text: 'Olzhasstik Motorsports | Use /command to get started' })
                 .setTimestamp();
 
             await i.update({ embeds: [categoryEmbed] });
