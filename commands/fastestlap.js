@@ -32,7 +32,7 @@ const http        = require("http");
 const PYTHON_BIN      = process.env.PYTHON_PATH || "python3";
 const SCRIPT_PATH     = path.join(__dirname, "..", "analyze.py");
 const TMP_DIR         = "/tmp/om_race_videos";
-const REPLY_TIMEOUT   = 600_000;  // ms to wait for the user to send a video (10 min)
+const REPLY_TIMEOUT   = 900_000;  // ms to wait for the user to send a video (15 min)
 const ANALYZE_TIMEOUT = 300_000;  // 5 min max for analysis
 
 // Supported video MIME types Discord uses
@@ -93,7 +93,7 @@ module.exports = {
       );
     } catch {
       return interaction.editReply({
-        content: "⏰ Timeout — no video received in 10 minutes. Please run `/fastestlap` again.",
+        content: "⏰ Timeout — no video received in 15 minutes. Please run `/fastestlap` again.",
       });
     }
 
