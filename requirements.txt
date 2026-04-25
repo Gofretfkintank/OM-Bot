@@ -1,0 +1,16 @@
+# OM-Bot Race Analyzer — Python Dependencies
+# Install: pip install -r requirements.txt
+
+# Core vision — headless build (no GUI/Qt dependencies)
+# IMPORTANT: use opencv-python-headless on Railway, NOT opencv-python
+opencv-python-headless==4.9.0.80
+
+# OCR engine
+easyocr==1.7.1
+
+# EasyOCR's deep learning backend (auto-installed with easyocr, listed for clarity)
+torch==2.2.2+cpu       # CPU-only build — much smaller, sufficient for OCR
+torchvision==0.17.2+cpu
+
+# Numerical computing (numpy already pulled by torch/cv2 but pinned for stability)
+numpy==1.26.4
