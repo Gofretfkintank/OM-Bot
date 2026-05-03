@@ -1,12 +1,17 @@
 const {
     SlashCommandBuilder,
     PermissionFlagsBits,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    ComponentType,
 } = require('discord.js');
 
-const Driver      = require('../models/Driver');
+const Driver       = require('../models/Driver');
 const DriverRating = require('../models/DriverRating');
-const Economy     = require('../models/Economy');
-const Sponsor     = require('../models/Sponsor');
+const Economy      = require('../models/Economy');
+const Sponsor      = require('../models/Sponsor');
 const { getSponsorById } = require('../data/sponsorCatalog');
 const { CHAOS_POOL }     = require('./chaoscall');
 
@@ -25,40 +30,16 @@ const DNF_REWARD     = 0;
 // ─────────────────────────────────────────────────────────────────────────────
 //  CHAOS MODIFIER — applies to the base reward table
 // ─────────────────────────────────────────────────────────────────────────────
-/**
- * Returns the modified reward array for a given chaos modifier.
- * @param {number[]} baseRewards  - The original reward table (by finishing index)
- * @param {number}   count        - Number of finishers in this race
- * @param {object}   modifier     - chaos.modifier from CHAOS_POOL
- * @returns {number[]}            - Modified reward table (same length as count)
- */
 function applyChaosModifier(baseRewards, count, modifier) {
-    // Build a slice for only the actual finishers
     const slice = Array.from({ length: count }, (_, i) => baseRewards[i] ?? 0);
-
     switch (modifier.type) {
-        case 'multiply':
-            return slice.map(v => Math.floor(v * modifier.value));
-
-        case 'reverse':
-            // Reverse so the last finisher gets P1's coins, P1 gets the last slot's coins
-            return [...slice].reverse();
-
-        case 'flat':
-            return slice.map(() => modifier.value);
-
-        case 'zero_winner':
-            return slice.map((v, i) => (i === 0 ? 0 : v));
-
-        case 'podium_only':
-            // Only top 3 earn coins, tripled
-            return slice.map((v, i) => (i < 3 ? v * 3 : 0));
-
-        case 'zero_all':
-            return slice.map(() => 0);
-
-        default:
-            return slice;
+        case 'multiply':    return slice.map(v => Math.floor(v * modifier.value));
+        case 'reverse':     return [...slice].reverse();
+        case 'flat':        return slice.map(() => modifier.value);
+        case 'zero_winner': return slice.map((v, i) => (i === 0 ? 0 : v));
+        case 'podium_only': return slice.map((v, i) => (i < 3 ? v * 3 : 0));
+        case 'zero_all':    return slice.map(() => 0);
+        default:            return slice;
     }
 }
 
@@ -74,9 +55,7 @@ async function getDriver(userId, guild) {
                 || await guild?.members?.fetch(userId).catch(() => null);
             username = member?.user?.username || '';
         } catch { username = ''; }
-
         driver = await Driver.create({ userId, username });
-
         const existing = await DriverRating.findOne({ userId });
         if (!existing) await DriverRating.create({ userId, username });
     }
@@ -95,10 +74,7 @@ function parseIds(input, interaction) {
     const ids = [];
     for (const word of words) {
         const cleaned = word.replace(/[<@!>]/g, '').trim();
-        if (/^\d+$/.test(cleaned)) {
-            ids.push(cleaned);
-            continue;
-        }
+        if (/^\d+$/.test(cleaned)) { ids.push(cleaned); continue; }
         const member = interaction.guild.members.cache.find(m =>
             m.user.username.toLowerCase() === cleaned.toLowerCase() ||
             m.displayName.toLowerCase() === cleaned.toLowerCase()
@@ -110,12 +86,25 @@ function parseIds(input, interaction) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  COMMAND
+//  Option count breakdown (Discord max = 25):
+//    track, race_type          → 2
+//    p1–p10 (user options)     → 10
+//    p11–p16 (user options)    → 6
+//    p17_p20 (string, parsed)  → 1
+//    dnf, dns, comments        → 3
+//    ping_role                 → 1
+//    ──────────────────────────────
+//    Total                     → 23  ✅
+//
+//  midseason & chaoscall are collected via ephemeral follow-up (buttons/select)
+//  so they don't eat into the 25-option budget.
 // ─────────────────────────────────────────────────────────────────────────────
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('results')
         .setDescription('Post race results, update statistics, and distribute coins')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        // Required
         .addStringOption(opt =>
             opt.setName('track').setDescription('Track name').setRequired(true)
         )
@@ -129,6 +118,7 @@ module.exports = {
                 )
         )
         .addUserOption(opt => opt.setName('p1').setDescription('1st Place').setRequired(true))
+        // P2–P10
         .addUserOption(opt => opt.setName('p2').setDescription('2nd Place'))
         .addUserOption(opt => opt.setName('p3').setDescription('3rd Place'))
         .addUserOption(opt => opt.setName('p4').setDescription('4th Place'))
@@ -138,6 +128,20 @@ module.exports = {
         .addUserOption(opt => opt.setName('p8').setDescription('8th Place'))
         .addUserOption(opt => opt.setName('p9').setDescription('9th Place'))
         .addUserOption(opt => opt.setName('p10').setDescription('10th Place'))
+        // P11–P16 (individual user options)
+        .addUserOption(opt => opt.setName('p11').setDescription('11th Place'))
+        .addUserOption(opt => opt.setName('p12').setDescription('12th Place'))
+        .addUserOption(opt => opt.setName('p13').setDescription('13th Place'))
+        .addUserOption(opt => opt.setName('p14').setDescription('14th Place'))
+        .addUserOption(opt => opt.setName('p15').setDescription('15th Place'))
+        .addUserOption(opt => opt.setName('p16').setDescription('16th Place'))
+        // P17–P20 as a single string (mention or ID, space/comma separated, in finishing order)
+        .addStringOption(opt =>
+            opt.setName('p17_p20')
+                .setDescription('P17–P20: @mention or ID in order, space/comma separated')
+                .setRequired(false)
+        )
+        // DNF / DNS / Comments
         .addStringOption(opt =>
             opt.setName('dnf').setDescription('DNF drivers (@user, ID, or username)')
         )
@@ -147,60 +151,187 @@ module.exports = {
         .addStringOption(opt =>
             opt.setName('comments').setDescription('Race comments')
         )
-        .addBooleanOption(opt =>
-            opt.setName('midseason')
-                .setDescription('Mid-Season race? (true = stats not recorded, coins still awarded)')
-                .setRequired(false)
-        )
-        .addIntegerOption(opt =>
-            opt.setName('chaoscall')
-                .setDescription('Active Chaos Call ID (1-100) — bot adjusts coin rewards automatically if supported')
-                .setMinValue(1)
-                .setMaxValue(100)
+        // Ping role — selectable, no hardcoded ID
+        .addRoleOption(opt =>
+            opt.setName('ping_role')
+                .setDescription('Role to ping in the results post (leave empty for no ping)')
                 .setRequired(false)
         ),
 
     async execute(interaction) {
         if (!interaction.channel) return;
 
-        await interaction.deferReply();
+        // Defer ephemeral — the follow-up menu is admin-only
+        await interaction.deferReply({ ephemeral: true });
 
-        const track      = interaction.options.getString('track');
-        const raceType   = interaction.options.getString('race_type');
-        const comments   = interaction.options.getString('comments');
-        const isMidSeason = interaction.options.getBoolean('midseason') ?? false;
-        const chaosId    = interaction.options.getInteger('chaoscall') ?? null;
+        const track    = interaction.options.getString('track');
+        const raceType = interaction.options.getString('race_type');
+        const comments = interaction.options.getString('comments');
+        const pingRole = interaction.options.getRole('ping_role');
 
         const isGP     = raceType === 'gp';
         const isSprint = raceType === 'sprint';
 
-        // ── Resolve active chaos ───────────────────────────────────────────────
-        const chaos = chaosId ? CHAOS_POOL.find(c => c.id === chaosId) : null;
-
-        // Base reward table
-        let rewards = isGP ? [...GP_REWARDS] : [...SPRINT_REWARDS];
-
-        // Collect participants first so we know count for modifier
+        // ── Collect P1–P10 ────────────────────────────────────────────────────
         const participants = [];
-        for (let i = 1; i <= 10; i++) {
+        for (let i = 1; i <= 16; i++) {
             const user = interaction.options.getUser(`p${i}`);
             if (user) participants.push(user);
         }
 
-        // Apply chaos modifier if it's auto-calculable
-        if (chaos?.affectsResults === 'auto' && chaos.modifier) {
-            rewards = applyChaosModifier(rewards, participants.length, chaos.modifier);
+        // ── Collect P11–P20 ───────────────────────────────────────────────────
+        const p17to20raw   = interaction.options.getString('p17_p20');
+        const p17to20Ids   = parseIds(p17to20raw, interaction);
+        const p17to20Users = [];
+        for (const id of p17to20Ids) {
+            try {
+                const member = interaction.guild.members.cache.get(id)
+                    || await interaction.guild.members.fetch(id).catch(() => null);
+                if (member) p17to20Users.push(member.user);
+            } catch { /* skip unresolvable */ }
         }
 
-        const participantIds = participants.map(p => String(p.id));
+        // ── DNF / DNS ─────────────────────────────────────────────────────────
+        const dnfList = parseIds(interaction.options.getString('dnf'), interaction);
+        const dnsList = parseIds(interaction.options.getString('dns'), interaction);
+
+        const totalFinishers = participants.length + p17to20Users.length;
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  EPHEMERAL FOLLOW-UP — ask admin about optional extras
+        //  Only visible to the admin who ran the command.
+        // ─────────────────────────────────────────────────────────────────────
+
+        // Build chaos select options (only chaos calls that actually affect results)
+        const chaosOptions = CHAOS_POOL
+            .filter(c => c.affectsResults)
+            .slice(0, 24)
+            .map(c => ({
+                label: `#${c.id} — ${c.title}`.slice(0, 100),
+                description: c.category.slice(0, 100),
+                value: String(c.id),
+            }));
+
+        const extrasRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('extra_none')
+                .setLabel('✅ Post results now')
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId('extra_midseason')
+                .setLabel('📅 Mid-Season')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('extra_chaos')
+                .setLabel('⚡ Chaos Call')
+                .setStyle(ButtonStyle.Danger),
+        );
+
+        const followUpMsg = await interaction.editReply({
+            content: [
+                `## ⚙️ Extras — **${track}** (${isGP ? 'Grand Prix' : 'Sprint'})`,
+                `${totalFinishers} finisher(s) entered. Anything extra before posting?`,
+            ].join('\n'),
+            components: [extrasRow],
+        });
+
+        // ── Await admin button ────────────────────────────────────────────────
+        let isMidSeason = false;
+        let chaosId     = null;
+
+        await new Promise((resolve) => {
+            const btnCollector = followUpMsg.createMessageComponentCollector({
+                componentType: ComponentType.Button,
+                filter: i => i.user.id === interaction.user.id,
+                time: 60_000,
+                max: 1,
+            });
+
+            btnCollector.on('collect', async (btnInt) => {
+                await btnInt.deferUpdate();
+
+                if (btnInt.customId === 'extra_midseason') {
+                    isMidSeason = true;
+                    await interaction.editReply({
+                        content: `📅 **Mid-Season** confirmed — stats will NOT be recorded.\n⏳ Processing results...`,
+                        components: [],
+                    });
+                    resolve();
+
+                } else if (btnInt.customId === 'extra_chaos') {
+                    // Show chaos select menu
+                    const chaosRow = new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder()
+                            .setCustomId('chaos_select')
+                            .setPlaceholder('Select the active Chaos Call...')
+                            .addOptions(chaosOptions)
+                    );
+                    await interaction.editReply({
+                        content: `⚡ Select the active **Chaos Call**:`,
+                        components: [chaosRow],
+                    });
+
+                    try {
+                        const selectInt = await followUpMsg.awaitMessageComponent({
+                            componentType: ComponentType.StringSelect,
+                            filter: i => i.user.id === interaction.user.id,
+                            time: 30_000,
+                        });
+                        await selectInt.deferUpdate();
+                        chaosId = parseInt(selectInt.values[0], 10);
+                        await interaction.editReply({
+                            content: `⚡ **Chaos Call #${chaosId}** selected.\n⏳ Processing results...`,
+                            components: [],
+                        });
+                    } catch {
+                        await interaction.editReply({
+                            content: `⏱️ Chaos selection timed out — posting without chaos.`,
+                            components: [],
+                        });
+                    }
+                    resolve();
+
+                } else {
+                    // extra_none
+                    await interaction.editReply({
+                        content: `✅ No extras.\n⏳ Processing results...`,
+                        components: [],
+                    });
+                    resolve();
+                }
+            });
+
+            btnCollector.on('end', (_col, reason) => {
+                if (reason === 'time') {
+                    interaction.editReply({
+                        content: `⏱️ Timed out — posting results without extras.`,
+                        components: [],
+                    }).catch(() => {});
+                }
+                resolve();
+            });
+        });
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  PROCESS — now we have all data, run DB updates & build post
+        // ─────────────────────────────────────────────────────────────────────
+        const chaos = chaosId ? CHAOS_POOL.find(c => c.id === chaosId) : null;
+        let rewards = isGP ? [...GP_REWARDS] : [...SPRINT_REWARDS];
+
+        const allFinishers = [...participants, ...p17to20Users];
+
+        if (chaos?.affectsResults === 'auto' && chaos.modifier) {
+            rewards = applyChaosModifier(rewards, allFinishers.length, chaos.modifier);
+        }
+
+        const participantIds = allFinishers.map(p => String(p.id));
         const coinLog = [];
 
-        // ── Database loop ──────────────────────────────────────────────────────
-        for (const [index, user] of participants.entries()) {
+        // ── Database loop ─────────────────────────────────────────────────────
+        for (const [index, user] of allFinishers.entries()) {
             const driver = await getDriver(user.id, interaction.guild);
             const wallet = await getWallet(user.id);
 
-            // Stats — skipped entirely in mid-season
             if (!isMidSeason) {
                 if (isGP) driver.races++;
                 if (index === 0) {
@@ -216,7 +347,7 @@ module.exports = {
                 await driver.save();
             }
 
-            // Coins — always awarded (chaos modifier already applied to rewards[])
+            // Coins — always awarded
             let earned  = rewards[index] ?? 0;
             let boosted = false;
             if (earned > 0 && wallet.raceBoost) {
@@ -229,7 +360,7 @@ module.exports = {
                 coinLog.push({ user, pos: index + 1, coins: earned, boosted });
             }
 
-            // Sponsor — skipped for zero_all chaos (no coins in that race)
+            // Sponsor
             if (chaos?.modifier?.type !== 'zero_all') {
                 const sponsorRec = await Sponsor.findOne({ userId: user.id });
                 if (sponsorRec?.activeSponsorId) {
@@ -238,14 +369,14 @@ module.exports = {
                         let sponsorEarned = 0;
                         if (isGP) {
                             sponsorEarned += sponsor.basePerRace;
-                            if (index === 0)      sponsorEarned += sponsor.winBonus;
-                            else if (index <= 2)  sponsorEarned += sponsor.podiumBonus;
+                            if (index === 0)     sponsorEarned += sponsor.winBonus;
+                            else if (index <= 2) sponsorEarned += sponsor.podiumBonus;
                         }
                         if (isSprint && index === 0) sponsorEarned += sponsor.sprintBonus;
 
                         if (sponsorEarned > 0) {
                             await wallet.addCoins(sponsorEarned);
-                            sponsorRec.racesWithSponsor  = (sponsorRec.racesWithSponsor  || 0) + (isGP ? 1 : 0);
+                            sponsorRec.racesWithSponsor   = (sponsorRec.racesWithSponsor   || 0) + (isGP ? 1 : 0);
                             sponsorRec.totalSponsorEarned = (sponsorRec.totalSponsorEarned || 0) + sponsorEarned;
                             await sponsorRec.save();
                             coinLog.push({ user, pos: index + 1, coins: sponsorEarned, isSponsor: true, sponsorName: sponsor.name });
@@ -255,10 +386,7 @@ module.exports = {
             }
         }
 
-        // ── DNF / DNS ──────────────────────────────────────────────────────────
-        const dnfList = parseIds(interaction.options.getString('dnf'), interaction);
-        const dnsList = parseIds(interaction.options.getString('dns'), interaction);
-
+        // ── DNF loop ──────────────────────────────────────────────────────────
         const dnfReward = chaos?.modifier?.type === 'zero_all' ? 0 : DNF_REWARD;
 
         for (const id of dnfList) {
@@ -266,20 +394,16 @@ module.exports = {
             if (!isMidSeason) {
                 driver.dnf++;
                 if (!participantIds.includes(id) && isGP) driver.races++;
-
                 if (!driver.raceHistory) driver.raceHistory = [];
                 driver.raceHistory.push({ pos: 99, type: raceType, date: new Date() });
                 if (driver.raceHistory.length > 10) driver.raceHistory.shift();
-
                 await driver.save();
             }
-
             if (dnfReward > 0) {
                 const wallet = await getWallet(id);
                 await wallet.addCoins(dnfReward);
                 coinLog.push({ userId: id, pos: 'DNF', coins: dnfReward });
             }
-
             if (!isMidSeason && isGP) {
                 const sponsorRec = await Sponsor.findOne({ userId: id });
                 if (sponsorRec?.activeSponsorId) {
@@ -289,6 +413,7 @@ module.exports = {
             }
         }
 
+        // ── DNS loop ──────────────────────────────────────────────────────────
         for (const id of dnsList) {
             if (!isMidSeason) {
                 const driver = await getDriver(id, interaction.guild);
@@ -297,12 +422,11 @@ module.exports = {
             }
         }
 
-        // ── Build result message ───────────────────────────────────────────────
-        const seasonTag  = isMidSeason ? ' *(Mid-Season — stats not recorded)*' : '';
-        const raceLabel  = isGP ? 'GRAND PRIX' : 'SPRINT';
+        // ── Build public post ─────────────────────────────────────────────────
+        const seasonTag = isMidSeason ? ' *(Mid-Season — stats not recorded)*' : '';
+        const raceLabel = isGP ? 'GRAND PRIX' : 'SPRINT';
         let msg = `# ${track.toUpperCase()} — ${raceLabel}${seasonTag}\n\n`;
 
-        // Chaos header
         if (chaos) {
             if (chaos.affectsResults === 'auto') {
                 msg += `⚡ **Chaos Call #${chaos.id} — ${chaos.title}** *(applied automatically)*\n\n`;
@@ -312,7 +436,7 @@ module.exports = {
             }
         }
 
-        participants.forEach((user, i) => {
+        allFinishers.forEach((user, i) => {
             const log = coinLog.find(c => c.user?.id === user.id && !c.isSponsor);
             const rewardStr = log
                 ? ` *(+${log.coins} 🪙${log.boosted ? ' 🚀' : ''})*`
@@ -320,7 +444,7 @@ module.exports = {
             msg += `P${i + 1}: ${user}${i === 0 && isSprint ? ' ⏱️ (POLE)' : ''}${rewardStr}\n`;
         });
 
-        let lastPos = participants.length;
+        let lastPos = allFinishers.length;
         for (const id of dnfList) {
             lastPos++;
             const dnfStr = dnfReward > 0 ? ` *(+${dnfReward} 🪙)*` : '';
@@ -332,8 +456,13 @@ module.exports = {
         }
 
         if (comments) msg += `\n**Comments:**\n${comments}\n`;
-        msg += `\n<@&1452705943967105046>`;
+        if (pingRole)  msg += `\n${pingRole}`;
 
-        await interaction.editReply({ content: msg });
+        // ── Send public message & confirm to admin ────────────────────────────
+        await interaction.channel.send({ content: msg });
+        await interaction.editReply({
+            content: `✅ Results posted successfully!`,
+            components: [],
+        });
     },
 };
