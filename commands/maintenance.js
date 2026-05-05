@@ -1,11 +1,23 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const Maintenance = require('../models/Maintenance');
 
+//--------------------------
+// CONFIG
+//--------------------------
+
+const ANNOUNCEMENT_CHANNEL_ID = '1447146110689742951';
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('maintenance')
         .setDescription('Toggle maintenance mode.')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .addStringOption(option =>
+            option
+                .setName('duration')
+                .setDescription('Estimated maintenance duration (e.g. 30m, 1h, 2h30m). Optional.')
+                .setRequired(false)
+        ),
 
     async execute(interaction) {
 
@@ -19,12 +31,11 @@ module.exports = {
         if (!isStaff) {
             return interaction.reply({
                 content: '❌ Administrator permission is required to use this command.',
-                ephemeral: true // Yetki hatası kanalı kirletmesin diye sadece kullanan görsün
+                ephemeral: true
             });
         }
 
-        // BURASI DEĞİŞTİ: ephemeral kaldırıldı, artık herkes görebilir.
-        await interaction.deferReply(); 
+        await interaction.deferReply();
 
         //--------------------------
         // CURRENT STATE
@@ -38,6 +49,16 @@ module.exports = {
 
         if (!state || !state.active) {
 
+            // Parse optional duration input
+            const durationInput = interaction.options.getString('duration');
+            const estimatedMinutes = durationInput ? parseDuration(durationInput) : null;
+
+            if (durationInput && estimatedMinutes === null) {
+                return interaction.editReply({
+                    content: '❌ Invalid duration format. Use formats like `30m`, `1h`, or `2h30m`.',
+                });
+            }
+
             // Take a hash snapshot of all current commands
             const snapshot = {};
             for (const [name, cmd] of interaction.client.commands) {
@@ -48,14 +69,16 @@ module.exports = {
                 state = new Maintenance({ _id: 'singleton' });
             }
 
-            state.active       = true;
-            state.snapshot     = snapshot;
-            state.lockedCommands = [];
-            state.startedBy    = interaction.user.id;
-            state.startedAt    = new Date();
+            state.active           = true;
+            state.snapshot         = snapshot;
+            state.lockedCommands   = [];
+            state.startedBy        = interaction.user.id;
+            state.startedAt        = new Date();
+            state.estimatedMinutes = estimatedMinutes;
             await state.save();
 
-            const embed = new EmbedBuilder()
+            // Build the private staff reply embed
+            const staffEmbed = new EmbedBuilder()
                 .setColor(0xe67e22)
                 .setTitle('🔧 Maintenance Mode Enabled')
                 .setDescription(
@@ -63,11 +86,22 @@ module.exports = {
                     `A snapshot of **${Object.keys(snapshot).length}** commands has been saved.\n` +
                     `Changed or newly added commands will be automatically locked after a redeploy.`
                 )
-                .addFields({ name: 'Started By', value: `<@${interaction.user.id}>` })
-                .setFooter({ text: 'Gofret is cooking 🧇' })
+                .addFields(
+                    { name: 'Started By', value: `<@${interaction.user.id}>` },
+                    ...(estimatedMinutes
+                        ? [{ name: 'Estimated Duration', value: formatDuration(estimatedMinutes) }]
+                        : []
+                    )
+                )
+                .setFooter({ text: 'Dev team is working 🔧' })
                 .setTimestamp();
 
-            return interaction.editReply({ embeds: [embed] });
+            await interaction.editReply({ embeds: [staffEmbed] });
+
+            // Send public announcement
+            await sendMaintenanceAnnouncement(interaction.guild, estimatedMinutes, true);
+
+            return;
         }
 
         //--------------------------
@@ -78,11 +112,12 @@ module.exports = {
             ? state.lockedCommands.map(c => `\`/${c}\``).join(', ')
             : 'No commands were locked.';
 
-        state.active         = false;
-        state.snapshot       = {};
-        state.lockedCommands = [];
-        state.startedBy      = null;
-        state.startedAt      = null;
+        state.active           = false;
+        state.snapshot         = {};
+        state.lockedCommands   = [];
+        state.startedBy        = null;
+        state.startedAt        = null;
+        state.estimatedMinutes = null;
         await state.save();
 
         const embed = new EmbedBuilder()
@@ -94,9 +129,100 @@ module.exports = {
             )
             .setTimestamp();
 
-        return interaction.editReply({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] });
+
+        // Send public announcement that maintenance ended
+        await sendMaintenanceAnnouncement(interaction.guild, null, false);
     }
 };
+
+//--------------------------
+// ANNOUNCEMENT HELPER
+// Sends a public embed to the announcements channel
+//--------------------------
+
+async function sendMaintenanceAnnouncement(guild, estimatedMinutes, isStart) {
+    try {
+        const channel = guild.channels.cache.get(ANNOUNCEMENT_CHANNEL_ID)
+            || await guild.channels.fetch(ANNOUNCEMENT_CHANNEL_ID).catch(() => null);
+
+        if (!channel) return;
+
+        let embed;
+
+        if (isStart) {
+            const durationLine = estimatedMinutes
+                ? `⏱️ **Estimated Duration:** ${formatDuration(estimatedMinutes)}`
+                : null;
+
+            embed = new EmbedBuilder()
+                .setColor(0xe67e22)
+                .setTitle('🔧 Bot Maintenance')
+                .setDescription(
+                    [
+                        `The dev team is currently working on the bot. Some updates or improvements are being applied.`,
+                        durationLine,
+                        ``,
+                        `✅ **You can continue using the bot normally.**`,
+                        `If a command you're trying to use is currently under maintenance, the bot will notify you automatically.`
+                    ].filter(line => line !== null).join('\n')
+                )
+                .setFooter({ text: 'Olzhasstik Motorsports • Dev Team' })
+                .setTimestamp();
+        } else {
+            embed = new EmbedBuilder()
+                .setColor(0x2ecc71)
+                .setTitle('✅ Maintenance Complete')
+                .setDescription(
+                    `All systems are back online. The bot is fully operational.\n\n` +
+                    `Thank you for your patience!`
+                )
+                .setFooter({ text: 'Olzhasstik Motorsports • Dev Team' })
+                .setTimestamp();
+        }
+
+        await channel.send({ embeds: [embed] });
+
+    } catch (err) {
+        console.error('[maintenance] Failed to send announcement:', err);
+    }
+}
+
+//--------------------------
+// DURATION PARSER
+// Parses strings like "30m", "1h", "2h30m" → total minutes
+// Returns null if format is invalid
+//--------------------------
+
+function parseDuration(input) {
+    const str = input.trim().toLowerCase();
+    const regex = /^(?:(\d+)h)?(?:(\d+)m)?$/;
+    const match = str.match(regex);
+
+    if (!match || (!match[1] && !match[2])) return null;
+
+    const hours   = parseInt(match[1] || '0', 10);
+    const minutes = parseInt(match[2] || '0', 10);
+    const total   = hours * 60 + minutes;
+
+    return total > 0 ? total : null;
+}
+
+//--------------------------
+// DURATION FORMATTER
+// Converts minutes to human-readable string
+// e.g. 90 → "1 hour 30 minutes"
+//--------------------------
+
+function formatDuration(minutes) {
+    if (!minutes) return 'Unknown';
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    const parts = [];
+    if (h > 0) parts.push(`${h} hour${h !== 1 ? 's' : ''}`);
+    if (m > 0) parts.push(`${m} minute${m !== 1 ? 's' : ''}`);
+    return parts.join(' ');
+}
 
 //--------------------------
 // HASH HELPER
