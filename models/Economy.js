@@ -19,6 +19,9 @@ const economySchema = new mongoose.Schema({
     // Toplam kazanılan coin geçmişi (liderboard için)
     totalEarned: { type: Number, default: 0 },
 
+    // En yüksek para miktarı (wallet'te gösterilir)
+    maxMoney: { type: Number, default: 0 },
+
     // Son level ödülü alınan level (tekrar ödülü önlemek için)
     lastLevelRewarded: { type: Number, default: 0 },
 
@@ -37,6 +40,10 @@ const economySchema = new mongoose.Schema({
 economySchema.methods.addCoins = async function (amount) {
     this.coins += amount;
     this.totalEarned += amount;
+    // Update maxMoney if current coins exceed previous max
+    if (this.coins > this.maxMoney) {
+        this.maxMoney = this.coins;
+    }
     await this.save();
 };
 
