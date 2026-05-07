@@ -2,4 +2,4 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "node deploy-commands.js && node index.js"
+startCommand = "node index.js"
