@@ -28,8 +28,9 @@ const COINS_PER_LEVEL = 500;  // 10x scaled  // Her yeni Arcane lap
 const BOTS_COOLDOWN_MS = 30_000; // 30 saniye
 
 // ── Regex'ler ──────────────────────────────────────────────────────────────
-// Madcardex / Ballsdex / F1dex
-const CATCH_REGEX = /<@(\d+)> You (?:caught|signed) \*\*(.+?)\*\*/i;
+// Madcardex, Ballsdex, F1dex - Much more flexible pattern
+// Matches: "caught", "signed", and other variations
+const CATCH_REGEX = /<@(\d+)>\s+You\s+(?:caught|signed|collected)\s+\*\*(.+?)\*\*/i;
 
 // Arcane level-up
 const ARCANE_REGEX = /<@(\d+)> has reached lap \*\*(\d+)\*\*/i;
