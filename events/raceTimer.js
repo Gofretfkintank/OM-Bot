@@ -125,13 +125,45 @@ module.exports = (client) => {
         if (exists) return;
 
         // Parse time from message content
+        // Supports: hours, minutes, laps
+        // Priority: if "laps" detected, try to parse laps; otherwise parse time
         let totalMs = 0;
-        const hourRegex = /(\d+)\s*(h|hour|saat)/g;
-        const minRegex  = /(\d+)\s*(m|min|dk|dakika)/g;
+
+        const content = raceMsg.content;
+
+        // Check if this is a timed race (WEC/endurance style) vs lap-based
+        // Look for explicit time mentions (20 minutes, 1 hour, etc.)
+        const hourRegex = /(\d+)\s*(?:h|hour|saat|hr)/gi;
+        const minRegex  = /(\d+)\s*(?:m|min|dk|dakika|minute)/gi;
+
+        // Check for WEC-style duration: "Main Race Length: 20 minutes"
+        const wecMinutes = /(?:Main Race Length|Duration):\s*(\d+)\s*(?:minute|min|m)/i;
+        const wecMatch = content.match(wecMinutes);
+
         let match;
 
-        while ((match = hourRegex.exec(raceMsg.content)) !== null) totalMs += parseInt(match[1]) * 3600000;
-        while ((match = minRegex.exec(raceMsg.content))  !== null) totalMs += parseInt(match[1]) * 60000;
+        // Priority 1: WEC-style "Main Race Length" detection
+        if (wecMatch) {
+            totalMs = parseInt(wecMatch[1]) * 60000;
+        } else {
+            // Priority 2: Standard hour/minute regex
+            while ((match = hourRegex.exec(content)) !== null) {
+                totalMs += parseInt(match[1]) * 3600000;
+            }
+            while ((match = minRegex.exec(content)) !== null) {
+                totalMs += parseInt(match[1]) * 60000;
+            }
+
+            // Priority 3: Fallback to "In X minutes" format (race timer detection)
+            if (totalMs <= 0) {
+                const inMinutesRegex = /In\s+(\d+)\s+(?:minute|min|m)/i;
+                const inMatch = content.match(inMinutesRegex);
+                if (inMatch) {
+                    totalMs = parseInt(inMatch[1]) * 60000;
+                }
+            }
+        }
+
         if (totalMs <= 0) return;
 
         const endTime = raceMsg.createdTimestamp + totalMs;
