@@ -7,7 +7,7 @@ const MEDALS = ['🥇', '🥈', '🥉'];
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('coinboard')
-        .setDescription('En zengin 10 pilotu listeler.'),
+        .setDescription('Shows the top 10 richest pilots.'),
 
     async execute(interaction) {
         await interaction.deferReply();
@@ -34,7 +34,7 @@ module.exports = {
             })
         );
 
-        // Sorgulayan kullanıcının sırası
+        // Get requester's rank
         const selfWallet = await Economy.findOne({ userId: interaction.user.id });
         let selfRank = '';
         if (selfWallet) {
@@ -44,7 +44,7 @@ module.exports = {
 
         const embed = new EmbedBuilder()
             .setColor(0xf5c518)
-            .setTitle('🏦 OM Coin Liderboard')
+            .setTitle('🏦 OM Coin Leaderboard')
             .setDescription(lines.join('\n') + selfRank)
             .setFooter({ text: 'OM Economy System' })
             .setTimestamp();
