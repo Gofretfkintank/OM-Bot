@@ -41,7 +41,7 @@ module.exports = {
             })
             .addFields(
                 { name: '🪙 Coins', value: `**${wallet.coins.toLocaleString()}**`, inline: true },
-                { name: '📈 Total Earned', value: `**${wallet.totalEarned.toLocaleString()}**`, inline: true },
+                { name: '💰 Max Money', value: `**${wallet.maxMoney.toLocaleString()}**`, inline: true },
                 { name: '🏁 Arcane Level', value: `Lap **${wallet.level}**`, inline: true },
                 { name: '✅ Correct Answers', value: `**${wallet.correctAnswers}**`, inline: true },
             )
