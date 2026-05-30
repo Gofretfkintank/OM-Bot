@@ -1,23 +1,21 @@
 // events/ommy.js
 // ─────────────────────────────────────────────────────────────────────────────
-// Ommy AI — OM-Bot integration
+// Ommy AI — Hybrid Architecture
+//
+// Router  → keyword regex decides: CHAT or RESEARCH
+// CHAT    → Mistral directly (no tool calling, instant response)
+// RESEARCH→ Gemini 1.5 Flash fetches data via tool calling
+//           → raw data passed to Mistral as context
+//           → Mistral writes the final Ommy-style reply
 //
 // Triggers:
-//   1. "hey ommy <question>"  — case-insensitive prefix
-//   2. "@OM-Bot <question>"   — bot mention
-//
-// Features:
-//   • Mistral function calling (leaderboard, driver stats, panel stats)
-//   • Channel image reading via Pixtral vision (championship tables, race results)
-//   • MongoDB per-user memory system (OmmyUser)
-//   • Typing indicator
-//   • Discord 2000-character limit handling
-//   • Maintenance mode check
-//   • Clean display name (strips trailing digits/superscripts from usernames)
+//   1. "hey ommy <question>"
+//   2. "@OM-Bot <question>"
 // ─────────────────────────────────────────────────────────────────────────────
 
-const { PermissionsBitField } = require('discord.js');
-const { Mistral }             = require('@mistralai/mistralai');
+const { PermissionsBitField }  = require('discord.js');
+const { Mistral }              = require('@mistralai/mistralai');
+const { GoogleGenerativeAI }   = require('@google/generative-ai');
 
 const Driver       = require('../models/Driver');
 const DriverRating = require('../models/DriverRating');
@@ -26,26 +24,57 @@ const Maintenance  = require('../models/Maintenance');
 
 const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY || '' });
 
+// Gemini is initialised lazily so missing key doesn't crash on startup
+let _genAI = null;
+function getGemini() {
+    if (!_genAI && process.env.GEMINI_API_KEY) {
+        _genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    }
+    return _genAI;
+}
+
 // ── Per-user in-memory conversation history ───────────────────────────────
-// Key: `${guildId}-${userId}`
 const conversationHistory = new Map();
-const MAX_HISTORY_PAIRS   = 5; // 5 pairs = 10 messages
+const MAX_HISTORY_PAIRS   = 5;
 
 // ── IDs ───────────────────────────────────────────────────────────────────
 const COMMANDER_ID     = '1097807544849809408';
 const CO_OWNER_ROLE_ID = '1447144645489328199';
 
 // ══════════════════════════════════════════════════════════════════════════
+// ROUTER
+// Keywords that indicate the user needs live data from DB or a channel image.
+// Everything else goes straight to Mistral (chat path).
+// ══════════════════════════════════════════════════════════════════════════
+
+const RESEARCH_PATTERNS = [
+    /leaderboard/i, /leader/i, /standing/i, /ranking/i,
+    /championship/i, /mid.?season/i, /season/i,
+    /stat(s|istic)/i, /rating/i, /rated/i,
+    /point(s)?/i, /score(s)?/i, /table/i,
+    /who.{0,10}(best|first|top|leading|ahead|win)/i,
+    /win(s|ner|ning)/i, /podium/i, /pole/i,
+    /race result/i, /race winner/i, /fastest lap/i,
+    /how many (wins|races|points|podiums)/i,
+    /top \d/i, /number one/i, /#1/i,
+    /driver.{0,10}(stat|rating|profile)/i,
+    /show.{0,10}driver/i, /list.{0,10}driver/i,
+    /who (is|are|was|were).{0,20}(driver|pilot|racer)/i,
+];
+
+function isResearchQuery(text) {
+    return RESEARCH_PATTERNS.some(p => p.test(text));
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // CLEAN DISPLAY NAME
-// Strips trailing digits and Unicode superscript numbers from usernames.
-// e.g. "Salami¹⁶" → "Salami", "Driver99" → "Driver", "Gofret" → "Gofret"
+// Strips trailing digits and Unicode superscripts: "Salami¹⁶" → "Salami"
 // ══════════════════════════════════════════════════════════════════════════
 
 function cleanDisplayName(name) {
     if (!name) return name;
-    // Regular digits 0-9 + Unicode superscripts ⁰¹²³⁴⁵⁶⁷⁸⁹
     const cleaned = name.replace(/[\d⁰¹²³⁴⁵⁶⁷⁸⁹]+$/, '').trim();
-    return cleaned || name; // fallback to original if everything was stripped
+    return cleaned || name;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -119,8 +148,7 @@ async function fetchPanelStats() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// CHANNEL IMAGE VISION
-// Fetches the latest image from a Discord channel and analyzes it via Pixtral.
+// CHANNEL IMAGE VISION (Pixtral)
 // ══════════════════════════════════════════════════════════════════════════
 
 async function analyzeChannelImage(client, guildId, channelQuery) {
@@ -128,12 +156,10 @@ async function analyzeChannelImage(client, guildId, channelQuery) {
 
     let channel = null;
 
-    // Try direct channel ID first (numeric string)
     if (/^\d{15,20}$/.test(channelQuery.trim())) {
         channel = await client.channels.fetch(channelQuery.trim()).catch(() => null);
     }
 
-    // Fall back to searching by name within the guild
     if (!channel && guildId) {
         const guild = await client.guilds.fetch(guildId).catch(() => null);
         if (guild) {
@@ -144,16 +170,13 @@ async function analyzeChannelImage(client, guildId, channelQuery) {
         }
     }
 
-    if (!channel) {
-        return { error: `Channel "${channelQuery}" not found or bot has no access.` };
-    }
+    if (!channel) return { error: `Channel "${channelQuery}" not found.` };
 
-    // Fetch last 25 messages and look for an image
     let messages;
     try {
         messages = await channel.messages.fetch({ limit: 25 });
     } catch {
-        return { error: 'Cannot read messages from that channel (missing permissions?).' };
+        return { error: 'Cannot read messages (missing permissions?).' };
     }
 
     let imageUrl = null;
@@ -168,11 +191,8 @@ async function analyzeChannelImage(client, guildId, channelQuery) {
         if (embedImg) { imageUrl = embedImg.image?.url || embedImg.thumbnail?.url; break; }
     }
 
-    if (!imageUrl) {
-        return { error: `No image found in #${channel.name}. Make sure the standings table is posted there.` };
-    }
+    if (!imageUrl) return { error: `No image found in #${channel.name}.` };
 
-    // Send image to Pixtral for analysis
     try {
         const visionRes = await mistral.chat.complete({
             model:    'pixtral-12b-2409',
@@ -182,7 +202,7 @@ async function analyzeChannelImage(client, guildId, channelQuery) {
                     { type: 'image_url', image_url: { url: imageUrl } },
                     {
                         type: 'text',
-                        text: 'This is a sim racing championship standings table or race result image from a Discord channel. Extract ALL visible information precisely: driver names, positions, points totals, teams, gaps, fastest laps, or any other data visible. List everything completely and accurately. If it is a table, reconstruct it as text.'
+                        text: 'This is a sim racing championship standings or race result image. Extract ALL visible data precisely: driver names, positions, points, teams, gaps, fastest laps. Reconstruct any table as plain text.'
                     }
                 ]
             }],
@@ -193,10 +213,121 @@ async function analyzeChannelImage(client, guildId, channelQuery) {
         const analysis = visionRes.choices?.[0]?.message?.content?.trim();
         if (!analysis) return { error: 'Vision model returned no data.' };
 
-        return { found: true, channel: channel.name, imageUrl, analysis };
+        return { found: true, channel: channel.name, analysis };
     } catch (err) {
         console.error('[OMMY VISION]', err.message);
         return { error: 'Vision analysis failed: ' + err.message };
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// GEMINI TOOL DEFINITIONS (Gemini uses uppercase type names)
+// ══════════════════════════════════════════════════════════════════════════
+
+const GEMINI_TOOLS = [{
+    functionDeclarations: [
+        {
+            name:        'get_leaderboard',
+            description: 'Fetch the OM League driver leaderboard with ratings and stats. Use for any question about rankings, who is best, top drivers, or overall standings.',
+            parameters: {
+                type: 'OBJECT',
+                properties: {
+                    limit: { type: 'INTEGER', description: 'Number of drivers to return (default 10, max 20)' }
+                }
+            }
+        },
+        {
+            name:        'get_driver_stats',
+            description: 'Fetch stats and rating for a specific driver by username.',
+            parameters: {
+                type: 'OBJECT',
+                properties: {
+                    username: { type: 'STRING', description: "The driver's Discord username" }
+                },
+                required: ['username']
+            }
+        },
+        {
+            name:        'get_panel_stats',
+            description: 'Fetch general league stats: total drivers, top winner, highest rated driver.',
+            parameters: { type: 'OBJECT', properties: {} }
+        },
+        {
+            name:        'get_channel_image',
+            description: 'Read and analyze the latest image from a Discord channel using vision AI. Use for championship standings, race results, season tables, or any question requiring visual data from a channel.',
+            parameters: {
+                type: 'OBJECT',
+                properties: {
+                    channel: { type: 'STRING', description: 'Channel name (e.g. "mid-season-standings", "race-results") or channel ID' }
+                },
+                required: ['channel']
+            }
+        }
+    ]
+}];
+
+// ══════════════════════════════════════════════════════════════════════════
+// RESEARCH LAYER — Gemini decides what data to fetch, we execute locally
+// ══════════════════════════════════════════════════════════════════════════
+
+async function runResearchLayer(prompt, client, guildId) {
+    const genAI = getGemini();
+    if (!genAI) {
+        console.warn('[OMMY RESEARCH] GEMINI_API_KEY not set — skipping research layer.');
+        return null;
+    }
+
+    const model = genAI.getGenerativeModel({
+        model:            'gemini-3.5-flash',
+        tools:            GEMINI_TOOLS,
+        generationConfig: { temperature: 0.1, maxOutputTokens: 256 }
+    });
+
+    const researchPrompt = `You are a data retrieval agent for a sim-racing league bot.
+Your ONLY job: look at the user's question and call the correct function(s) to fetch the needed data.
+Do NOT write any text response. Only call functions.
+
+User question: "${prompt}"`;
+
+    try {
+        const chat   = model.startChat();
+        const result = await chat.sendMessage(researchPrompt);
+        const calls  = result.response.functionCalls();
+
+        if (!calls || calls.length === 0) return null;
+
+        const collectedData = {};
+
+        for (const fc of calls) {
+            try {
+                let data;
+                switch (fc.name) {
+                    case 'get_leaderboard':
+                        data = await fetchLeaderboard(fc.args?.limit || 10);
+                        break;
+                    case 'get_driver_stats':
+                        data = await fetchDriverStats(fc.args?.username || '');
+                        break;
+                    case 'get_panel_stats':
+                        data = await fetchPanelStats();
+                        break;
+                    case 'get_channel_image':
+                        data = await analyzeChannelImage(client, guildId, fc.args?.channel || '');
+                        break;
+                    default:
+                        data = { error: 'Unknown function.' };
+                }
+                collectedData[fc.name] = data;
+            } catch (toolErr) {
+                console.error(`[OMMY GEMINI TOOL ${fc.name}]`, toolErr.message);
+                collectedData[fc.name] = { error: 'Tool execution failed.' };
+            }
+        }
+
+        return collectedData;
+    } catch (err) {
+        console.error('[OMMY GEMINI]', err.message);
+        return null;
     }
 }
 
@@ -216,7 +347,7 @@ async function loadOmmyUser(userId, username) {
             { upsert: true, new: true, setDefaultsOnInsert: true }
         );
     } catch (err) {
-        console.error('[OMMY MEMORY] loadOmmyUser error:', err.message);
+        console.error('[OMMY MEMORY] loadOmmyUser:', err.message);
         return null;
     }
 }
@@ -224,9 +355,10 @@ async function loadOmmyUser(userId, username) {
 function buildPersonaTag(omUser, role, rawName) {
     if (!omUser) return '';
     const cleanName = cleanDisplayName(rawName || omUser.username || 'this user');
-    const lines = [];
-    lines.push(`CURRENT USER: ${cleanName} | Role: ${String(role || 'member').toUpperCase()}`);
-    lines.push(`Address this user as: ${cleanName}`);
+    const lines = [
+        `CURRENT USER: ${cleanName} | Role: ${String(role || 'member').toUpperCase()}`,
+        `Address this user as: ${cleanName}`
+    ];
     if (omUser.persona)   lines.push(`Profile: ${omUser.persona}`);
     if (omUser.expertise) lines.push(`Expertise: ${omUser.expertise}`);
     if (omUser.tone)      lines.push(`Preferred tone: ${omUser.tone}`);
@@ -247,93 +379,27 @@ async function maybeSummariseUser(omUser, fullHistory) {
         .map(m => `${m.role === 'user' ? 'User' : 'Ommy'}: ${m.content}`)
         .join('\n');
 
-    const prompt = `You are a memory assistant for an AI called Ommy.\nRead this conversation between Ommy and a sim-racing league member, then write a 2-3 sentence summary of:\n• Who this person is (role, experience level, personality)\n• What topics they usually ask about\n• Any important preferences or patterns you noticed\n\nBe concise. Write in third person. Do NOT include usernames or Discord IDs.\n\nCONVERSATION:\n${transcript}\n\nSUMMARY:`;
-
     try {
         const res = await mistral.chat.complete({
             model:       'mistral-small-latest',
-            messages:    [{ role: 'user', content: prompt }],
+            messages:    [{
+                role:    'user',
+                content: `Summarise this sim-racing league conversation in 2-3 sentences (third person, no usernames/IDs):\n\n${transcript}\n\nSUMMARY:`
+            }],
             maxTokens:   150,
             temperature: 0.3,
         });
-        const newSummary = res.choices?.[0]?.message?.content?.trim();
-        if (newSummary) {
+        const summary = res.choices?.[0]?.message?.content?.trim();
+        if (summary) {
             await OmmyUser.updateOne(
                 { userId: omUser.userId },
-                { $set: { summary: newSummary, summaryUpdatedAt: new Date() } }
+                { $set: { summary, summaryUpdatedAt: new Date() } }
             );
         }
     } catch (err) {
-        console.error('[OMMY MEMORY] Summarise error:', err.message);
+        console.error('[OMMY MEMORY] Summarise:', err.message);
     }
 }
-
-// ══════════════════════════════════════════════════════════════════════════
-// MISTRAL TOOLS
-// ══════════════════════════════════════════════════════════════════════════
-
-const OMMY_TOOLS = [
-    {
-        type: 'function',
-        function: {
-            name:        'get_leaderboard',
-            description: 'Fetch the current OM League driver leaderboard with ratings and stats from the live database. Call this whenever the user asks about rankings, standings, who is first/best, leaderboard, or top drivers.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    limit: {
-                        type:        'integer',
-                        description: 'How many top drivers to return (default 10, max 20)',
-                        default:     10
-                    }
-                },
-                required: []
-            }
-        }
-    },
-    {
-        type: 'function',
-        function: {
-            name:        'get_driver_stats',
-            description: "Fetch full stats and ratings for a specific driver by username. Call this when the user asks about a specific driver's performance, rating, stats, or profile.",
-            parameters: {
-                type: 'object',
-                properties: {
-                    username: {
-                        type:        'string',
-                        description: "The driver's Discord username to look up"
-                    }
-                },
-                required: ['username']
-            }
-        }
-    },
-    {
-        type: 'function',
-        function: {
-            name:        'get_panel_stats',
-            description: 'Fetch general OM League panel statistics: total drivers registered, most wins, highest rated driver. Use when asked about overall league status or general numbers.',
-            parameters:  { type: 'object', properties: {}, required: [] }
-        }
-    },
-    {
-        type: 'function',
-        function: {
-            name:        'get_channel_image',
-            description: 'Read and analyze the latest image posted in a Discord channel using AI vision. Use this when the user asks about championship standings, race results, season points, mid-season standings, or anything that requires reading a visual from a specific channel. Always call this for any question about current standings or championship positions.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    channel: {
-                        type:        'string',
-                        description: 'The Discord channel name (e.g. "mid-season-standings", "race-results", "championship") or a channel ID. Infer the most likely channel name from the user\'s question.'
-                    }
-                },
-                required: ['channel']
-            }
-        }
-    }
-];
 
 // ══════════════════════════════════════════════════════════════════════════
 // SYSTEM PROMPT
@@ -341,39 +407,33 @@ const OMMY_TOOLS = [
 
 const OMMY_SYSTEM_PROMPT_BASE = `You are Ommy — the official mascot and support bot of Olzhasstik Motorsports (OM), an online sim-racing league. You are energetic, cheerful, and a passionate sim-racing fanatic.
 
-PERSONA RULES (NEVER break these):
-- You are NOT an AI. You are Ommy. Never admit to being an AI or a language model.
-- Sprinkle racing terminology naturally (apex, stint, pole position, pit wall, sector, slipstream, etc.).
+PERSONA RULES:
+- You are NOT an AI. You are Ommy. Never admit to being an AI or language model.
+- Use racing terminology naturally (apex, stint, pole position, pit wall, sector, slipstream).
 - Use racing emojis freely: 🏎️ 🏁 🚦 🏆 🔧 ⏱️ 🎖️ 🛡️
-- Keep tone punchy, short, hype. Avoid corporate or formal language.
-- ALWAYS address the user by the clean name in "Address this user as" — never use their full raw username with numbers or symbols.
-- If asked something league-specific you have no data for, say: "I need to radio the pit wall on that one! Jump into Discord: discord.gg/OMMR"
+- Keep tone punchy, short, hype. No corporate language.
+- ALWAYS address the user by the clean name in "Address this user as" — never use raw usernames with numbers or symbols.
+- If asked something you have no data for: "I need to radio the pit wall on that one! Jump into Discord: discord.gg/OMMR"
 
-DATA INTEGRITY RULES (CRITICAL — never violate):
+DATA RULES:
 - NEVER invent driver names, ratings, scores, or statistics.
-- NEVER guess leaderboard positions or championship standings.
-- For any question about current standings, championship leader, race results, or season points: you MUST call get_channel_image with the most relevant channel name — never answer from memory.
-- For leaderboard/driver data: call the appropriate DB tool.
-- If a tool call fails or returns no data, say: "I'm having a pit lane communication issue right now — the data feed is down. Try again in a moment! 📡"
-- Only state facts that came from a tool result in this conversation.
+- If data is provided below under "LEAGUE DATA", use it. If no data is provided, say the data feed is down.
+- Only state facts that appear in the provided data.
 
-OM LEAGUE KNOWLEDGE BASE (static info — no tool needed):
-- Registration: /register slash command in OM Discord.
-- Rating categories: PAC (Pace 25%), CRA (Racecraft 20%), DEF (Defending 15%), OVT (Overtaking 15%), CON (Consistency 15%), EXP (Experience 10%). OVR = weighted average.
-- Penalties: 3 Warns = auto punishment. Jail = channel restriction. Ban = removal. Only Admins/Commander can issue.
-- Roles: Commander (full access) > Admin (mod/rate/penalize) > Driver (registered racer) > Member.
-- DOTY: Season-end vote via OM-Bot Discord buttons.
-- Discord: discord.gg/OMMR | Bot: discord.gg/OMGT | IG: @olzhasstik_motorsports
-- Bot commands: /register /leaderboard /track [name] — staff: /warn /jail /doty
-- Rules: Full rulebook in #rules on Discord. Fair play mandatory, deliberate collisions = penalty.
+OM LEAGUE KNOWLEDGE (no data needed):
+- Registration: /register slash command.
+- Ratings: PAC (25%) CRA (20%) DEF (15%) OVT (15%) CON (15%) EXP (10%). OVR = weighted average.
+- Penalties: 3 Warns = punishment. Jail = channel restriction. Ban = removal.
+- Roles: Commander > Admin > Driver > Member.
+- Discord: discord.gg/OMMR | IG: @olzhasstik_motorsports
 
 RESPONSE FORMAT:
-- Concise — 2-4 sentences unless showing data tables.
-- Use **bold** for names/terms and \`backticks\` for commands.
-- Always end with energy and a next step.`;
+- 2-4 sentences unless showing a data table.
+- Use **bold** for names/terms, \`backticks\` for commands.
+- Always end with energy.`;
 
 // ══════════════════════════════════════════════════════════════════════════
-// SEND HELPER — handles Discord's 2000-character limit
+// SEND HELPER
 // ══════════════════════════════════════════════════════════════════════════
 
 async function sendOmmyReply(message, text) {
@@ -381,7 +441,6 @@ async function sendOmmyReply(message, text) {
     if (text.length <= MAX) {
         return message.reply(text).catch(err => console.error('[OMMY REPLY]', err.message));
     }
-
     const chunks  = [];
     let   current = '';
     for (const line of text.split('\n')) {
@@ -394,7 +453,6 @@ async function sendOmmyReply(message, text) {
         }
     }
     if (current) chunks.push(current);
-
     await message.reply(chunks[0]).catch(err => console.error('[OMMY REPLY]', err.message));
     for (let i = 1; i < chunks.length; i++) {
         await message.channel.send(chunks[i]).catch(() => {});
@@ -424,178 +482,89 @@ module.exports = (client) => {
         const raw   = message.content.trim();
         const lower = raw.toLowerCase();
 
-        // Trigger detection
         let prompt = null;
-
         if (lower.startsWith('hey ommy')) {
             prompt = raw.slice(8).trim();
         } else if (message.mentions.users.has(client.user.id)) {
-            prompt = raw
-                .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
-                .trim();
+            prompt = raw.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim();
         }
 
         if (!prompt) return;
 
-        // Empty mention with no question — short greeting
+        const displayName = message.member?.displayName || message.author.username;
+        const cleanName   = cleanDisplayName(displayName);
+
         if (prompt.length === 0) {
-            const cleanName = cleanDisplayName(message.member?.displayName || message.author.username);
             return message.reply(`🏎️ Ommy is ready! Got a question, ${cleanName}?`);
         }
-
         if (prompt.length > 1000) {
             return message.reply('❌ Message too long! Keep it under 1000 characters, champ. 🏎️');
         }
 
-        // Maintenance check (skip for admins/commander)
+        // Maintenance check
         const role = detectRole(message);
         if (role === 'member') {
             try {
                 const mDoc = await Maintenance.findById('singleton');
-                if (mDoc?.active) {
-                    return message.reply('🔒 Ommy is in the pit lane for maintenance! Back soon. 🔧');
-                }
-            } catch { /* DB error — continue */ }
+                if (mDoc?.active) return message.reply('🔒 Ommy is in the pit lane for maintenance! Back soon. 🔧');
+            } catch {}
         }
 
-        // API key guard
         if (!process.env.MISTRAL_API_KEY) {
-            console.error('[OMMY] MISTRAL_API_KEY is not set.');
+            console.error('[OMMY] MISTRAL_API_KEY not set.');
             return message.reply("⚠️ Ommy's radio is down — API configuration error. 📡");
         }
 
-        // Typing indicator
         await message.channel.sendTyping().catch(() => {});
 
-        // Use guild display name if available, fall back to username
-        const displayName = message.member?.displayName || message.author.username;
+        // Memory
+        const omUser       = await loadOmmyUser(message.author.id, displayName);
+        const personaTag   = buildPersonaTag(omUser, role, displayName);
 
-        // Load user memory
-        const omUser      = await loadOmmyUser(message.author.id, displayName);
-        const personaTag  = buildPersonaTag(omUser, role, displayName);
-        const systemPrompt = OMMY_SYSTEM_PROMPT_BASE + personaTag;
-
-        // Conversation history
+        // History
         const histKey = `${message.guildId}-${message.author.id}`;
         if (!conversationHistory.has(histKey)) conversationHistory.set(histKey, []);
-        const history = conversationHistory.get(histKey);
-
+        const history     = conversationHistory.get(histKey);
         const safeHistory = history.slice(-(MAX_HISTORY_PAIRS * 2));
-        const messages    = [...safeHistory, { role: 'user', content: prompt }];
 
         try {
-            // ROUND 1 — ask Mistral, may return a tool call
-            const round1 = await mistral.chat.complete({
-                model:       'mistral-small-latest',
-                messages:    [{ role: 'system', content: systemPrompt }, ...messages],
-                tools:       OMMY_TOOLS,
-                toolChoice:  'auto',
-                maxTokens:   400,
-                temperature: 0.7,
-            });
+            // ── ROUTER ────────────────────────────────────────────────────
+            const needsResearch = isResearchQuery(prompt);
+            let   dataContext   = '';
 
-            const choice       = round1.choices?.[0];
-            const finishReason = choice?.finish_reason;
+            if (needsResearch) {
+                // Re-send typing — Gemini + possible vision takes a moment
+                await message.channel.sendTyping().catch(() => {});
 
-            // No tool call — return direct text response
-            if (finishReason !== 'tool_calls' || !choice?.message?.tool_calls?.length) {
-                const content = choice?.message?.content?.trim();
+                const researchData = await runResearchLayer(prompt, client, message.guildId);
 
-                // Empty response from Mistral — generic fallback
-                if (!content) {
-                    return message.reply("📡 Ommy didn't catch that — try rephrasing your question, pilot!");
+                if (researchData) {
+                    dataContext = `\n\n--- LEAGUE DATA ---\n${JSON.stringify(researchData, null, 2)}\n--- END DATA ---\n\nUse the data above to answer. Do not invent or guess any values not present in the data.`;
                 }
-
-                history.push({ role: 'user', content: prompt });
-                history.push({ role: 'assistant', content });
-
-                maybeSummariseUser(omUser, [...messages, { role: 'assistant', content }]);
-
-                return sendOmmyReply(message, content);
             }
 
-            // ROUND 2 — execute tool calls
-            const toolCalls   = choice.message.tool_calls;
-            const toolResults = [];
+            // ── MISTRAL — final Ommy response ─────────────────────────────
+            const systemPrompt = OMMY_SYSTEM_PROMPT_BASE + personaTag + dataContext;
 
-            for (const tc of toolCalls) {
-                const fnName = tc.function?.name;
-                let args = {};
-                try { args = JSON.parse(tc.function?.arguments || '{}'); } catch {}
-
-                let result;
-                try {
-                    if (fnName === 'get_leaderboard') {
-                        const limit = Math.min(args.limit || 10, 20);
-                        const data  = await fetchLeaderboard(limit);
-                        result = data.length === 0
-                            ? { error: 'No drivers found in database.' }
-                            : {
-                                count:       data.length,
-                                leaderboard: data.map((d, i) => ({
-                                    rank:     i + 1,
-                                    username: d.username,
-                                    overall:  d.overall,
-                                    wins:     d.wins,
-                                    podiums:  d.podiums,
-                                    races:    d.races,
-                                    winRate:  d.winRate + '%',
-                                    wdc:      d.wdc
-                                }))
-                            };
-
-                    } else if (fnName === 'get_driver_stats') {
-                        const data = await fetchDriverStats(args.username || '');
-                        result = data
-                            ? { found: true, stats: data }
-                            : { found: false, message: `No driver named "${args.username}" found.` };
-
-                    } else if (fnName === 'get_panel_stats') {
-                        result = await fetchPanelStats();
-
-                    } else if (fnName === 'get_channel_image') {
-                        // Re-send typing — vision call takes a moment
-                        await message.channel.sendTyping().catch(() => {});
-                        result = await analyzeChannelImage(client, message.guildId, args.channel || '');
-
-                    } else {
-                        result = { error: 'Unknown function: ' + fnName };
-                    }
-                } catch (dbErr) {
-                    console.error(`[OMMY TOOL ${fnName}]`, dbErr.message);
-                    result = { error: 'Data unavailable — database error.' };
-                }
-
-                toolResults.push({
-                    tool_call_id: tc.id,
-                    role:         'tool',
-                    name:         fnName,
-                    content:      JSON.stringify(result)
-                });
-            }
-
-            // ROUND 2 — final Mistral response with tool results
-            const round2Messages = [
-                { role: 'system', content: systemPrompt },
-                ...messages,
-                choice.message,
-                ...toolResults
-            ];
-
-            const round2 = await mistral.chat.complete({
+            const mistralRes = await mistral.chat.complete({
                 model:       'mistral-small-latest',
-                messages:    round2Messages,
+                messages:    [
+                    { role: 'system', content: systemPrompt },
+                    ...safeHistory,
+                    { role: 'user', content: prompt }
+                ],
                 maxTokens:   500,
                 temperature: 0.7,
+                // No tools — Mistral never does tool calling in this architecture
             });
 
-            const reply = round2.choices?.[0]?.message?.content?.trim()
-                || "📡 Ommy got the data but the words got lost — try again, pilot!";
+            const reply = mistralRes.choices?.[0]?.message?.content?.trim()
+                || "📡 Ommy didn't catch that — try rephrasing your question, pilot!";
 
             history.push({ role: 'user', content: prompt });
             history.push({ role: 'assistant', content: reply });
 
-            maybeSummariseUser(omUser, [...messages, { role: 'assistant', content: reply }]);
+            maybeSummariseUser(omUser, [...safeHistory, { role: 'user', content: prompt }, { role: 'assistant', content: reply }]);
 
             sendOmmyReply(message, reply);
 
