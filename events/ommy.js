@@ -13,6 +13,7 @@
 //   • Typing indicator
 //   • Discord 2000-character limit handling
 //   • Maintenance mode check
+//   • Clean display name (strips trailing digits/superscripts from usernames)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const { PermissionsBitField } = require('discord.js');
@@ -33,6 +34,19 @@ const MAX_HISTORY_PAIRS   = 5; // 5 pairs = 10 messages
 // ── IDs ───────────────────────────────────────────────────────────────────
 const COMMANDER_ID     = '1097807544849809408';
 const CO_OWNER_ROLE_ID = '1447144645489328199';
+
+// ══════════════════════════════════════════════════════════════════════════
+// CLEAN DISPLAY NAME
+// Strips trailing digits and Unicode superscript numbers from usernames.
+// e.g. "Salami¹⁶" → "Salami", "Driver99" → "Driver", "Gofret" → "Gofret"
+// ══════════════════════════════════════════════════════════════════════════
+
+function cleanDisplayName(name) {
+    if (!name) return name;
+    // Regular digits 0-9 + Unicode superscripts ⁰¹²³⁴⁵⁶⁷⁸⁹
+    const cleaned = name.replace(/[\d⁰¹²³⁴⁵⁶⁷⁸⁹]+$/, '').trim();
+    return cleaned || name; // fallback to original if everything was stripped
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // DB HELPERS
@@ -207,10 +221,12 @@ async function loadOmmyUser(userId, username) {
     }
 }
 
-function buildPersonaTag(omUser, role, name) {
+function buildPersonaTag(omUser, role, rawName) {
     if (!omUser) return '';
+    const cleanName = cleanDisplayName(rawName || omUser.username || 'this user');
     const lines = [];
-    lines.push(`CURRENT USER: ${name || omUser.username || 'this user'} | Role: ${String(role || 'member').toUpperCase()}`);
+    lines.push(`CURRENT USER: ${cleanName} | Role: ${String(role || 'member').toUpperCase()}`);
+    lines.push(`Address this user as: ${cleanName}`);
     if (omUser.persona)   lines.push(`Profile: ${omUser.persona}`);
     if (omUser.expertise) lines.push(`Expertise: ${omUser.expertise}`);
     if (omUser.tone)      lines.push(`Preferred tone: ${omUser.tone}`);
@@ -304,13 +320,13 @@ const OMMY_TOOLS = [
         type: 'function',
         function: {
             name:        'get_channel_image',
-            description: 'Read and analyze the latest image posted in a Discord channel using AI vision. Use this when the user asks about championship standings tables, race results, season points, or anything that requires reading a visual from a specific channel.',
+            description: 'Read and analyze the latest image posted in a Discord channel using AI vision. Use this when the user asks about championship standings, race results, season points, mid-season standings, or anything that requires reading a visual from a specific channel. Always call this for any question about current standings or championship positions.',
             parameters: {
                 type: 'object',
                 properties: {
                     channel: {
                         type:        'string',
-                        description: 'The Discord channel name (e.g. "mid-season-standings", "race-results", "championship") or a channel ID.'
+                        description: 'The Discord channel name (e.g. "mid-season-standings", "race-results", "championship") or a channel ID. Infer the most likely channel name from the user\'s question.'
                     }
                 },
                 required: ['channel']
@@ -330,15 +346,16 @@ PERSONA RULES (NEVER break these):
 - Sprinkle racing terminology naturally (apex, stint, pole position, pit wall, sector, slipstream, etc.).
 - Use racing emojis freely: 🏎️ 🏁 🚦 🏆 🔧 ⏱️ 🎖️ 🛡️
 - Keep tone punchy, short, hype. Avoid corporate or formal language.
-- If asked something league-specific you have no data for, say exactly: "I need to radio the pit wall on that one! Jump into Discord: discord.gg/OMMR"
+- ALWAYS address the user by the clean name in "Address this user as" — never use their full raw username with numbers or symbols.
+- If asked something league-specific you have no data for, say: "I need to radio the pit wall on that one! Jump into Discord: discord.gg/OMMR"
 
 DATA INTEGRITY RULES (CRITICAL — never violate):
 - NEVER invent driver names, ratings, scores, or statistics.
-- NEVER guess what the leaderboard looks like.
-- If you need live data (leaderboard, driver stats, league numbers), you MUST call the appropriate tool — do not answer from memory.
+- NEVER guess leaderboard positions or championship standings.
+- For any question about current standings, championship leader, race results, or season points: you MUST call get_channel_image with the most relevant channel name — never answer from memory.
+- For leaderboard/driver data: call the appropriate DB tool.
 - If a tool call fails or returns no data, say: "I'm having a pit lane communication issue right now — the data feed is down. Try again in a moment! 📡"
 - Only state facts that came from a tool result in this conversation.
-- When the user asks about standings from a channel image, ALWAYS call get_channel_image — never guess.
 
 OM LEAGUE KNOWLEDGE BASE (static info — no tool needed):
 - Registration: /register slash command in OM Discord.
@@ -365,7 +382,6 @@ async function sendOmmyReply(message, text) {
         return message.reply(text).catch(err => console.error('[OMMY REPLY]', err.message));
     }
 
-    // Split by line to preserve formatting
     const chunks  = [];
     let   current = '';
     for (const line of text.split('\n')) {
@@ -423,7 +439,8 @@ module.exports = (client) => {
 
         // Empty mention with no question — short greeting
         if (prompt.length === 0) {
-            return message.reply('🏎️ Ommy is ready! Got a question, pilot?');
+            const cleanName = cleanDisplayName(message.member?.displayName || message.author.username);
+            return message.reply(`🏎️ Ommy is ready! Got a question, ${cleanName}?`);
         }
 
         if (prompt.length > 1000) {
@@ -444,15 +461,18 @@ module.exports = (client) => {
         // API key guard
         if (!process.env.MISTRAL_API_KEY) {
             console.error('[OMMY] MISTRAL_API_KEY is not set.');
-            return message.reply('⚠️ Ommy\'s radio is down — API configuration error. 📡');
+            return message.reply("⚠️ Ommy's radio is down — API configuration error. 📡");
         }
 
         // Typing indicator
         await message.channel.sendTyping().catch(() => {});
 
+        // Use guild display name if available, fall back to username
+        const displayName = message.member?.displayName || message.author.username;
+
         // Load user memory
-        const omUser      = await loadOmmyUser(message.author.id, message.author.username);
-        const personaTag  = buildPersonaTag(omUser, role, message.author.username);
+        const omUser      = await loadOmmyUser(message.author.id, displayName);
+        const personaTag  = buildPersonaTag(omUser, role, displayName);
         const systemPrompt = OMMY_SYSTEM_PROMPT_BASE + personaTag;
 
         // Conversation history
@@ -479,14 +499,19 @@ module.exports = (client) => {
 
             // No tool call — return direct text response
             if (finishReason !== 'tool_calls' || !choice?.message?.tool_calls?.length) {
-                const reply = choice?.message?.content?.trim() || 'Ommy lost radio contact! 📡 Try again.';
+                const content = choice?.message?.content?.trim();
+
+                // Empty response from Mistral — generic fallback
+                if (!content) {
+                    return message.reply("📡 Ommy didn't catch that — try rephrasing your question, pilot!");
+                }
 
                 history.push({ role: 'user', content: prompt });
-                history.push({ role: 'assistant', content: reply });
+                history.push({ role: 'assistant', content });
 
-                maybeSummariseUser(omUser, [...messages, { role: 'assistant', content: reply }]);
+                maybeSummariseUser(omUser, [...messages, { role: 'assistant', content }]);
 
-                return sendOmmyReply(message, reply);
+                return sendOmmyReply(message, content);
             }
 
             // ROUND 2 — execute tool calls
@@ -565,7 +590,7 @@ module.exports = (client) => {
             });
 
             const reply = round2.choices?.[0]?.message?.content?.trim()
-                || 'Ommy got the data but lost words! 📡 Try again.';
+                || "📡 Ommy got the data but the words got lost — try again, pilot!";
 
             history.push({ role: 'user', content: prompt });
             history.push({ role: 'assistant', content: reply });
