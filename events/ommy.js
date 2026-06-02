@@ -797,16 +797,24 @@ module.exports = (client) => {
                 }
             });
 
-            const chat    = model.startChat({ history: toGeminiHistory(safeHistory) });
-            const result1 = await chat.sendMessage(prompt);
-            const resp1   = result1.response;
-            const calls   = resp1.functionCalls?.() || [];
+            const chat = model.startChat({ history: toGeminiHistory(safeHistory) });
 
-            let reply;
+            // Multi-round tool call loop.
+            // Gemini may chain tool calls (e.g. get_channel_image fails → tries scan_channel_messages).
+            // We keep executing until Gemini returns actual text or we hit the round limit.
+            let reply           = null;
+            let currentResponse = (await chat.sendMessage(prompt)).response;
 
-            if (calls.length === 0) {
-                reply = safeText(resp1) || "📡 Ommy didn't catch that — try rephrasing, pilot!";
-            } else {
+            for (let round = 0; round < 4; round++) {
+                const calls = currentResponse.functionCalls?.() || [];
+
+                if (calls.length === 0) {
+                    // Gemini returned text — we're done
+                    reply = safeText(currentResponse);
+                    break;
+                }
+
+                // Execute all tool calls for this round
                 const functionResponses = [];
                 for (const fc of calls) {
                     let toolResult;
@@ -816,14 +824,21 @@ module.exports = (client) => {
                         console.error(`[OMMY TOOL ${fc.name}]`, err.message);
                         toolResult = { error: 'Tool failed.' };
                     }
+
+                    // Gemini requires functionResponse.response to always be an object
+                    const responseObj = Array.isArray(toolResult)
+                        ? { data: toolResult }
+                        : (toolResult && typeof toolResult === 'object' ? toolResult : { result: toolResult });
+
                     functionResponses.push({
-                        functionResponse: { name: fc.name, response: toolResult }
+                        functionResponse: { name: fc.name, response: responseObj }
                     });
                 }
 
-                const result2 = await chat.sendMessage(functionResponses);
-                reply = safeText(result2.response) || "📡 Got the data but lost the words — try again!";
+                currentResponse = (await chat.sendMessage(functionResponses)).response;
             }
+
+            if (!reply) reply = safeText(currentResponse) || "📡 Got the data but lost the words — try again!";
 
             history.push({ role: 'user', content: prompt });
             history.push({ role: 'assistant', content: reply });
