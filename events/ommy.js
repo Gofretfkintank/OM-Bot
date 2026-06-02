@@ -252,7 +252,23 @@ async function resolveChannels(client, guildId, query) {
 
 async function scanChannelMessages(client, guildId, channelQuery, limit = 40) {
     const channels = await resolveChannels(client, guildId, channelQuery);
-    if (channels.length === 0) return { error: `Channel "${channelQuery}" not found.` };
+    if (channels.length === 0) {
+        // Include available channel names so Gemini can tell the user or try an alternative
+        const guild = await client.guilds.fetch(guildId).catch(() => null);
+        let available = [];
+        if (guild) {
+            await guild.channels.fetch().catch(() => {});
+            available = guild.channels.cache
+                .filter(c => c.isTextBased())
+                .map(c => c.name)
+                .slice(0, 20);
+        }
+        return {
+            error: `Channel "${channelQuery}" not found.`,
+            availableChannels: available,
+            hint: 'This channel may not exist yet. Tell the user it does not exist.'
+        };
+    }
 
     // If multiple channels found (category match), scan all and merge summaries
     if (channels.length > 1) {
@@ -805,16 +821,15 @@ module.exports = (client) => {
             let reply           = null;
             let currentResponse = (await chat.sendMessage(prompt)).response;
 
-            for (let round = 0; round < 4; round++) {
+            // Max 2 tool call rounds — beyond that Gemini is stuck, cut it off
+            for (let round = 0; round < 2; round++) {
                 const calls = currentResponse.functionCalls?.() || [];
 
                 if (calls.length === 0) {
-                    // Gemini returned text — we're done
                     reply = safeText(currentResponse);
                     break;
                 }
 
-                // Execute all tool calls for this round
                 const functionResponses = [];
                 for (const fc of calls) {
                     let toolResult;
@@ -825,7 +840,6 @@ module.exports = (client) => {
                         toolResult = { error: 'Tool failed.' };
                     }
 
-                    // Gemini requires functionResponse.response to always be an object
                     const responseObj = Array.isArray(toolResult)
                         ? { data: toolResult }
                         : (toolResult && typeof toolResult === 'object' ? toolResult : { result: toolResult });
@@ -835,7 +849,13 @@ module.exports = (client) => {
                     });
                 }
 
-                currentResponse = (await chat.sendMessage(functionResponses)).response;
+                try {
+                    currentResponse = (await chat.sendMessage(functionResponses)).response;
+                } catch (loopErr) {
+                    console.error('[OMMY LOOP]', loopErr?.message || loopErr);
+                    reply = "📡 Hit a snag fetching that data — the pit crew is looking into it! Try again.";
+                    break;
+                }
             }
 
             if (!reply) reply = safeText(currentResponse) || "📡 Got the data but lost the words — try again!";
