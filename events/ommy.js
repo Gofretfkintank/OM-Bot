@@ -773,16 +773,31 @@ module.exports = (client) => {
         const history     = conversationHistory.get(histKey);
         const safeHistory = history.slice(-(MAX_HISTORY_PAIRS * 2));
 
+        // Safe text extractor — response.text() can throw on some Gemini edge cases
+        const safeText = (response) => {
+            try { return response.text()?.trim() || null; }
+            catch { return null; }
+        };
+
+        // Refresh typing indicator every 7s so Discord doesn't drop it during vision/multi-tool ops
+        const typingInterval = setInterval(() => {
+            message.channel.sendTyping().catch(() => {});
+        }, 7000);
+
         try {
             const genAI = getGemini();
             const model = genAI.getGenerativeModel({
                 model:             'gemini-3.5-flash',
                 tools:             GEMINI_TOOLS,
                 systemInstruction: systemPrompt,
-                generationConfig:  { temperature: 0.8, maxOutputTokens: 600 }
+                generationConfig:  {
+                    temperature:     0.8,
+                    maxOutputTokens: 1024,
+                    thinkingConfig:  { thinkingBudget: 0 } // disabled — prevents token starvation
+                }
             });
 
-            const chat   = model.startChat({ history: toGeminiHistory(safeHistory) });
+            const chat    = model.startChat({ history: toGeminiHistory(safeHistory) });
             const result1 = await chat.sendMessage(prompt);
             const resp1   = result1.response;
             const calls   = resp1.functionCalls?.() || [];
@@ -790,10 +805,8 @@ module.exports = (client) => {
             let reply;
 
             if (calls.length === 0) {
-                reply = resp1.text()?.trim() || "📡 Ommy didn't catch that — try rephrasing, pilot!";
+                reply = safeText(resp1) || "📡 Ommy didn't catch that — try rephrasing, pilot!";
             } else {
-                await message.channel.sendTyping().catch(() => {});
-
                 const functionResponses = [];
                 for (const fc of calls) {
                     let toolResult;
@@ -809,7 +822,7 @@ module.exports = (client) => {
                 }
 
                 const result2 = await chat.sendMessage(functionResponses);
-                reply = result2.response.text()?.trim() || "📡 Got the data but lost the words — try again!";
+                reply = safeText(result2.response) || "📡 Got the data but lost the words — try again!";
             }
 
             history.push({ role: 'user', content: prompt });
@@ -826,6 +839,8 @@ module.exports = (client) => {
         } catch (err) {
             console.error('[OMMY BOT ERROR]', err?.message || err);
             message.reply('🔧 Ommy hit the wall — engine failure! Try again in a moment. 🏎️').catch(() => {});
+        } finally {
+            clearInterval(typingInterval);
         }
     });
 };
