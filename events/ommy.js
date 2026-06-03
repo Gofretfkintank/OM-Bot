@@ -168,7 +168,7 @@ async function getCachedOrFetch(client, guildId, channel, limit = 40) {
     const genAI = getGemini();
     if (genAI && entries.length > 0) {
         try {
-            const model  = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+            const model  = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
             const result = await model.generateContent(
                 `Channel: #${channel.name}\nCategory: ${channel.parent?.name || 'unknown'}\n\nRecent messages:\n${entries.slice(0, 20).map(e => `${e.author}: ${e.content}`).join('\n')}\n\nIn 1-2 sentences: (1) what is this channel for, (2) what's currently being discussed?`
             );
@@ -328,7 +328,7 @@ async function getChannelImage(client, guildId, channelQuery) {
         const mimeType = (imgRes.headers['content-type'] || 'image/jpeg').split(';')[0];
 
         const genAI       = getGemini();
-        const visionModel = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+        const visionModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
         const visionResult = await visionModel.generateContent([
             { inlineData: { mimeType, data: base64 } },
@@ -384,7 +384,7 @@ async function buildBehaviorProfile(client, guildId, userId, displayName) {
 
         if (userMessages.length < 3) return;
 
-        const model  = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+        const model  = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
         const prompt = `You are analyzing a Discord sim-racing league member's messages to build a behavioral profile.
 
 Recent messages:
@@ -529,7 +529,7 @@ async function maybeSummariseUser(omUser, historySnapshot) {
     if (!genAI) return;
 
     try {
-        const model  = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+        const model  = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
         const result = await model.generateContent(
             `Summarise this sim-racing league conversation in 2-3 sentences (third person, no usernames/IDs):\n\n${transcript}\n\nSUMMARY:`
         );
@@ -803,7 +803,7 @@ module.exports = (client) => {
         try {
             const genAI = getGemini();
             const model = genAI.getGenerativeModel({
-                model:             'gemini-3.5-flash',
+                model:             'gemini-2.5-flash-lite',
                 tools:             GEMINI_TOOLS,
                 systemInstruction: systemPrompt,
                 generationConfig: {
