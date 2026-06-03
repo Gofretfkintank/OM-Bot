@@ -806,10 +806,11 @@ module.exports = (client) => {
                 model:             'gemini-3.5-flash',
                 tools:             GEMINI_TOOLS,
                 systemInstruction: systemPrompt,
-                generationConfig:  {
+                generationConfig: {
                     temperature:     0.8,
-                    maxOutputTokens: 1024,
-                    thinkingConfig:  { thinkingBudget: 0 } // disabled — prevents token starvation
+                    maxOutputTokens: 2048,
+                    // thinkingConfig intentionally omitted — thinkingBudget: 0 breaks
+                    // tool calling in Gemini 3.5 Flash (thinking tokens are separate anyway)
                 }
             });
 
@@ -872,7 +873,8 @@ module.exports = (client) => {
             sendOmmyReply(message, reply);
 
         } catch (err) {
-            console.error('[OMMY BOT ERROR]', err?.message || err);
+            console.error('[OMMY BOT ERROR]', err?.status || '', err?.message || err);
+            console.error('[OMMY STACK]', err?.stack?.split('\n').slice(0, 3).join(' | '));
             message.reply('🔧 Ommy hit the wall — engine failure! Try again in a moment. 🏎️').catch(() => {});
         } finally {
             clearInterval(typingInterval);
