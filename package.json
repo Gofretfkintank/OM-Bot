@@ -12,7 +12,7 @@
     "dotenv": "^16.3.1",
     "mongoose": "^8.0.0",
     "axios": "^1.6.5",
-    "@google/generative-ai": "^0.21.0"
+    "@google/generative-ai": "^0.21.0",
     "aternos-api": "^1.0.0"
   }
 }
