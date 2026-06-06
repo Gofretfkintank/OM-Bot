@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y python3 python3-pip \
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 RUN pip3 install py-aternos --break-system-packages
 
