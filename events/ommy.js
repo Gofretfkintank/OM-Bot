@@ -168,7 +168,7 @@ async function getCachedOrFetch(client, guildId, channel, limit = 40) {
     const genAI = getGemini();
     if (genAI && entries.length > 0) {
         try {
-            const model  = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+            const model  = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
             const result = await model.generateContent(
                 `Channel: #${channel.name}\nCategory: ${channel.parent?.name || 'unknown'}\n\nRecent messages:\n${entries.slice(0, 20).map(e => `${e.author}: ${e.content}`).join('\n')}\n\nIn 1-2 sentences: (1) what is this channel for, (2) what's currently being discussed?`
             );
