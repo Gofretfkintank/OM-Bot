@@ -302,54 +302,85 @@ async function scanChannelMessages(client, guildId, channelQuery, limit = 40) {
 // If channel query maps to a category, scans ALL channels in it.
 // ══════════════════════════════════════════════════════════════════════════
 
-async function getChannelImage(client, guildId, channelQuery) {
+async function getChannelImage(client, guildId, channelQuery, userPrompt = '') {
     if (!channelQuery) return { error: 'No channel specified.' };
 
     const channels = await resolveChannels(client, guildId, channelQuery);
     if (channels.length === 0) return { error: `Channel "${channelQuery}" not found.` };
 
-    // Collect image URLs from all candidate channels
-    let imageUrl    = null;
-    let imageChannel = null;
+    // Collect multiple recent image candidates (not just the first one found),
+    // each with its message caption + timestamp, across all candidate channels.
+    // A channel often has standings posts from several seasons/rounds — grabbing
+    // only the single latest image silently returns the wrong one whenever the
+    // user asks about an earlier season/round/date.
+    const MAX_IMAGES = 6;
+    const candidates = [];
 
     for (const ch of channels) {
         try {
-            const msgs = await ch.messages.fetch({ limit: 30 });
+            const msgs = await ch.messages.fetch({ limit: 100 });
             for (const [, msg] of msgs) {
                 const att = msg.attachments.find(a =>
                     a.contentType?.startsWith('image/') ||
                     /\.(png|jpg|jpeg|gif|webp)$/i.test(a.name || '')
                 );
-                if (att) { imageUrl = att.url; imageChannel = ch; break; }
                 const emb = msg.embeds.find(e => e.image?.url || e.thumbnail?.url);
-                if (emb)  { imageUrl = emb.image?.url || emb.thumbnail?.url; imageChannel = ch; break; }
+                const url = att?.url || emb?.image?.url || emb?.thumbnail?.url;
+                if (!url) continue;
+                candidates.push({
+                    url,
+                    channelName: ch.name,
+                    caption:     (msg.content || '').slice(0, 200),
+                    timestamp:   msg.createdAt.toISOString(),
+                });
             }
         } catch { continue; }
-        if (imageUrl) break;
     }
 
-    if (!imageUrl) {
+    if (candidates.length === 0) {
         return { error: `No image found in ${channels.map(c => '#' + c.name).join(', ')}.` };
     }
 
-    // Analyze with Gemini vision
+    candidates.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const top = candidates.slice(0, MAX_IMAGES);
+
+    // Build a multi-image vision prompt: the model picks whichever post
+    // actually matches what the user asked (season/round/date), instead of
+    // us blindly assuming "latest = correct".
+    const genAI       = getGemini();
+    const visionModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+    const parts = [{
+        text:
+`The user asked: "${userPrompt || '(no extra context given)'}"
+
+Below are up to ${top.length} recent images posted in the relevant Discord channel(s), newest first, each with its message caption and timestamp. These may be standings/results from DIFFERENT seasons, rounds, or dates — do not assume the newest one is automatically correct.
+
+Your job:
+1. Pick the image that actually matches what the user asked for (season, round, or date, if they mentioned one). If they did not specify, use the newest one.
+2. Extract ALL visible data from THAT image: driver/team names, positions, points, gaps, etc. Reconstruct it as a clear plain-text table.
+3. Explicitly mention which post (its caption and/or date) the data came from, so it is clear which season/round this is.
+4. If none of the images below seem to match what the user asked for, say so plainly instead of guessing or substituting a different one.`
+    }];
+
+    for (let i = 0; i < top.length; i++) {
+        const c = top[i];
+        try {
+            const imgRes   = await axios.get(c.url, { responseType: 'arraybuffer', timeout: 12000 });
+            const base64   = Buffer.from(imgRes.data).toString('base64');
+            const mimeType = (imgRes.headers['content-type'] || 'image/jpeg').split(';')[0];
+            parts.push({ text: `--- Image ${i + 1} | #${c.channelName} | ${c.timestamp} | caption: "${c.caption || '(no text)'}" ---` });
+            parts.push({ inlineData: { mimeType, data: base64 } });
+        } catch { /* skip unreachable image, continue with the rest */ }
+    }
+
     try {
-        const imgRes   = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 12000 });
-        const base64   = Buffer.from(imgRes.data).toString('base64');
-        const mimeType = (imgRes.headers['content-type'] || 'image/jpeg').split(';')[0];
-
-        const genAI       = getGemini();
-        const visionModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-        const visionResult = await visionModel.generateContent([
-            { inlineData: { mimeType, data: base64 } },
-            { text: 'This is a sim racing championship standings table or race result from a Discord server. Extract ALL visible data: driver names, positions, points totals, teams, gaps, fastest laps. Reconstruct any table as plain text with clear columns.' }
-        ]);
-
+        const visionResult = await visionModel.generateContent(parts);
         return {
-            found:    true,
-            channel:  imageChannel.name,
-            analysis: visionResult.response.text(),
+            found:          true,
+            channel:        top[0].channelName,
+            candidateCount: top.length,
+            analysis:       visionResult.response.text(),
         };
     } catch (err) {
         console.error('[OMMY VISION]', err.message);
