@@ -339,7 +339,7 @@ async function getChannelImage(client, guildId, channelQuery) {
         const mimeType = (imgRes.headers['content-type'] || 'image/jpeg').split(';')[0];
 
         const genAI       = getGemini();
-        const visionModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+        const visionModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
         const visionResult = await visionModel.generateContent([
             { inlineData: { mimeType, data: base64 } },
