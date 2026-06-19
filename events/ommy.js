@@ -205,11 +205,22 @@ async function getCachedOrFetch(client, guildId, channel, limit = 40) {
 
 // ══════════════════════════════════════════════════════════════════════════
 // CHANNEL RESOLVER
-// Finds a Discord channel by name or ID.
-// If not found by exact name, searches all channels in a matching category.
-// Returns an array of candidate channels (usually 1, but multiple for
-// category-wide searches).
+// Finds Discord channel(s) matching a query.
+//
+// Returns the UNION of:
+//   (a) any text channel whose name matches the query, and
+//   (b) all text channels inside any category whose name matches the query
+// Both sides use a normalized comparison (lowercase, hyphens/underscores/
+// emoji/brackets stripped to spaces) so "mid-season" reliably matches a
+// category literally named "『 Mid Season Championship 』" — previously a
+// single coincidental channel-name hit (e.g. "mid-season-rules") would
+// short-circuit and the real category, possibly holding the actual
+// standings channel, was never even checked.
 // ══════════════════════════════════════════════════════════════════════════
+
+function normalizeChannelQuery(s) {
+    return s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
 
 async function resolveChannels(client, guildId, query) {
     const guild = await client.guilds.fetch(guildId).catch(() => null);
@@ -223,27 +234,27 @@ async function resolveChannels(client, guildId, query) {
         return ch ? [ch] : [];
     }
 
-    const q = query.toLowerCase().trim();
+    const q = normalizeChannelQuery(query);
+    const matched = new Map(); // channelId -> channel, dedup across both match types
 
-    // Exact name match
-    const exact = guild.channels.cache.find(c =>
-        c.isTextBased() && c.name.toLowerCase().includes(q)
-    );
-    if (exact) return [exact];
-
-    // No exact match → look for a category whose name matches,
-    // return all text channels in that category
-    const matchingCategory = guild.channels.cache.find(c =>
-        c.type === ChannelType.GuildCategory &&
-        (c.name.toLowerCase().includes(q) || q.includes(c.name.toLowerCase()))
-    );
-    if (matchingCategory) {
-        return guild.channels.cache
-            .filter(c => c.isTextBased() && c.parentId === matchingCategory.id)
-            .map(c => c);
+    // (a) Channel name matches
+    for (const [, c] of guild.channels.cache) {
+        if (!c.isTextBased()) continue;
+        const cn = normalizeChannelQuery(c.name);
+        if (cn.includes(q) || q.includes(cn)) matched.set(c.id, c);
     }
 
-    return [];
+    // (b) Category name matches → include every channel inside it
+    for (const [, cat] of guild.channels.cache) {
+        if (cat.type !== ChannelType.GuildCategory) continue;
+        const catName = normalizeChannelQuery(cat.name);
+        if (!(catName.includes(q) || q.includes(catName))) continue;
+        for (const [, c] of guild.channels.cache) {
+            if (c.isTextBased() && c.parentId === cat.id) matched.set(c.id, c);
+        }
+    }
+
+    return [...matched.values()];
 }
 
 // ══════════════════════════════════════════════════════════════════════════
