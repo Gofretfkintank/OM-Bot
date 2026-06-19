@@ -540,7 +540,7 @@ async function maybeSummariseUser(omUser, historySnapshot) {
     if (!genAI) return;
 
     try {
-        const model  = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+        const model  = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
         const result = await model.generateContent(
             `Summarise this sim-racing league conversation in 2-3 sentences (third person, no usernames/IDs):\n\n${transcript}\n\nSUMMARY:`
         );
