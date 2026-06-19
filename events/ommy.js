@@ -880,7 +880,7 @@ module.exports = (client) => {
                 for (const fc of calls) {
                     let toolResult;
                     try {
-                        toolResult = await executeTool(fc.name, fc.args || {}, client, message.guildId);
+                        toolResult = await executeTool(fc.name, fc.args || {}, client, message.guildId, prompt);
                     } catch (err) {
                         console.error(`[OMMY TOOL ${fc.name}]`, err.message);
                         toolResult = { error: 'Tool failed.' };
