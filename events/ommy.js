@@ -819,14 +819,12 @@ module.exports = (client) => {
         try {
             const genAI = getGemini();
             const model = genAI.getGenerativeModel({
-                model:             'gemini-2.5-flash-lite',
+                model:             'gemini-2.5-flash',
                 tools:             GEMINI_TOOLS,
                 systemInstruction: systemPrompt,
                 generationConfig: {
                     temperature:     0.8,
                     maxOutputTokens: 2048,
-                    // thinkingConfig intentionally omitted — thinkingBudget: 0 breaks
-                    // tool calling in Gemini 3.5 Flash (thinking tokens are separate anyway)
                 }
             });
 
