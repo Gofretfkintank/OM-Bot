@@ -652,7 +652,7 @@ const GEMINI_TOOLS = [{
 // TOOL EXECUTOR
 // ══════════════════════════════════════════════════════════════════════════
 
-async function executeTool(name, args, client, guildId) {
+async function executeTool(name, args, client, guildId, userPrompt) {
     switch (name) {
         case 'get_leaderboard': {
             const data = await fetchLeaderboard(Math.min(args.limit || 10, 20));
@@ -669,7 +669,7 @@ async function executeTool(name, args, client, guildId) {
         case 'get_panel_stats':
             return await fetchPanelStats();
         case 'get_channel_image':
-            return await getChannelImage(client, guildId, args.channel || '');
+            return await getChannelImage(client, guildId, args.channel || '', userPrompt);
         case 'scan_channel_messages':
             return await scanChannelMessages(client, guildId, args.channel || '', args.limit);
         default:
