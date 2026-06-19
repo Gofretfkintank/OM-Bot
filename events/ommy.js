@@ -621,7 +621,7 @@ const GEMINI_TOOLS = [{
         },
         {
             name:        'get_channel_image',
-            description: 'Read and analyze the latest image in a Discord channel (or all channels in a matching category) using vision AI. Use for championship standings, race results, season tables, WCC/WDC standings. If given a category name (e.g. "mid-season", "championship"), scans all channels in that category.',
+            description: 'Read and analyze recent images in a Discord channel (or all channels in a matching category) using vision AI. Automatically considers multiple recent posts and their captions to find the one matching the season/round/date the user asked about — do not assume only the single latest image exists. Use for championship standings, race results, season tables, WCC/WDC standings. If given a category name (e.g. "mid-season", "championship"), scans all channels in that category.',
             parameters: {
                 type: 'OBJECT',
                 properties: {
