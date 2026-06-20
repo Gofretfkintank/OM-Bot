@@ -48,6 +48,9 @@ function getGemini() {
 const conversationHistory = new Map();
 const MAX_HISTORY_PAIRS   = 6;
 
+// ── Commander-only lock toggle — while true, Ommy never calls Gemini ───────
+let ommyLocked = false;
+
 // ══════════════════════════════════════════════════════════════════════════
 // CLEAN DISPLAY NAME
 // "Salami¹⁶" → "Salami"
