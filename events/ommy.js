@@ -983,7 +983,7 @@ module.exports = (client) => {
             const genAI = getGemini();
             const model = genAI.getGenerativeModel({
                 model:             'gemini-2.5-flash',
-                tools:             GEMINI_TOOLS,
+                tools:             getToolsForRole(role),
                 systemInstruction: systemPrompt,
                 generationConfig: {
                     temperature:     0.8,
