@@ -18,7 +18,7 @@
 //   2. "@OM-Bot <question>"
 // ─────────────────────────────────────────────────────────────────────────────
 
-const { PermissionsBitField, ChannelType } = require('discord.js');
+const { PermissionsBitField, ChannelType, EmbedBuilder } = require('discord.js');
 const { GoogleGenerativeAI }               = require('@google/generative-ai');
 const axios                                = require('axios');
 
@@ -27,6 +27,7 @@ const DriverRating  = require('../models/DriverRating');
 const OmmyUser      = require('../models/OmmyUser');
 const ChannelCache  = require('../models/ChannelCache');
 const Maintenance   = require('../models/Maintenance');
+const Warn          = require('../models/Warn');
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const COMMANDER_ID         = '1097807544849809408';
