@@ -48,6 +48,20 @@ function getGemini() {
 const conversationHistory = new Map();
 const MAX_HISTORY_PAIRS   = 6;
 
+// ── Track message IDs Ommy itself sent as AI-generated replies ─────────────
+// Used to tell "reply to Ommy's own answer" apart from a reply to any other
+// bot-authored message (slash command embeds, other features, etc.) — those
+// share the same bot author ID but were never an actual Ommy conversation turn.
+const ommyMessageIds = new Set();
+const MAX_TRACKED_OMMY_IDS = 1000;
+
+function trackOmmyMessageId(id) {
+    ommyMessageIds.add(id);
+    if (ommyMessageIds.size > MAX_TRACKED_OMMY_IDS) {
+        ommyMessageIds.delete(ommyMessageIds.values().next().value);
+    }
+}
+
 // ── Commander-only lock toggle — while true, Ommy never calls Gemini ───────
 let ommyLocked = false;
 
