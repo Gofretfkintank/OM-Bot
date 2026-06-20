@@ -734,7 +734,7 @@ function getToolsForRole(role) {
 // TOOL EXECUTOR
 // ══════════════════════════════════════════════════════════════════════════
 
-async function executeTool(name, args, client, guildId, userPrompt) {
+async function executeTool(name, args, client, guildId, userPrompt, message) {
     switch (name) {
         case 'get_leaderboard': {
             const data = await fetchLeaderboard(Math.min(args.limit || 10, 20));
@@ -754,6 +754,56 @@ async function executeTool(name, args, client, guildId, userPrompt) {
             return await getChannelImage(client, guildId, args.channel || '', userPrompt);
         case 'scan_channel_messages':
             return await scanChannelMessages(client, guildId, args.channel || '', args.limit);
+
+        case 'ban_member': {
+            // Re-check LIVE Discord permission — the cached "role" used to decide
+            // whether this tool was even offered is not enough on its own.
+            if (!message?.member?.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+                return { error: 'permission_denied', message: 'You need the Ban Members permission to do that.' };
+            }
+            const guild  = message.guild;
+            const target = await resolveTargetMember(guild, args.target || '');
+            if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
+            if (target.id === message.author.id) return { error: 'invalid_target', message: 'You cannot ban yourself.' };
+            if (target.id === COMMANDER_ID)       return { error: 'invalid_target', message: 'Cannot ban the Commander.' };
+            if (!target.bannable) return { error: 'cannot_ban', message: 'I cannot ban this member (role hierarchy).' };
+
+            const hasFullPower = message.author.id === COMMANDER_ID || message.member.roles.cache.has(CO_OWNER_ROLE_ID);
+            if (target.permissions.has(PermissionsBitField.Flags.ManageMessages) && !hasFullPower) {
+                return { error: 'invalid_target', message: 'Only Commander/Co-Owner can ban staff members.' };
+            }
+
+            const reason = `${args.reason || 'No reason provided'} (via Ommy, requested by ${message.author.tag})`;
+            try {
+                await guild.members.ban(target.id, { reason });
+                return { success: true, banned: target.user.tag };
+            } catch (err) {
+                return { error: 'ban_failed', message: err.message };
+            }
+        }
+
+        case 'mute_member': {
+            if (!message?.member?.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+                return { error: 'permission_denied', message: 'You need the Moderate Members permission to do that.' };
+            }
+            const guild  = message.guild;
+            const target = await resolveTargetMember(guild, args.target || '');
+            if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
+            if (target.id === message.author.id) return { error: 'invalid_target', message: 'You cannot mute yourself.' };
+            if (!target.moderatable) return { error: 'cannot_mute', message: 'I cannot mute this member (role hierarchy).' };
+
+            const ms = parseDuration(args.duration || '');
+            if (!ms) return { error: 'invalid_duration', message: 'Invalid duration. Examples: 10m, 1h, 2d.' };
+
+            const reason = `${args.reason || 'No reason provided'} (via Ommy, requested by ${message.author.tag})`;
+            try {
+                await target.timeout(ms, reason);
+                return { success: true, muted: target.user.tag, duration: args.duration };
+            } catch (err) {
+                return { error: 'mute_failed', message: err.message };
+            }
+        }
+
         default:
             return { error: 'Unknown function: ' + name };
     }
