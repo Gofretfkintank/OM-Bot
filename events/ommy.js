@@ -1311,13 +1311,49 @@ module.exports = (client) => {
         const raw   = message.content.trim();
         const lower = raw.toLowerCase();
 
+        // Typed mention only — message.mentions.users also auto-includes the
+        // author of whatever message this is a reply to (Discord pings the
+        // replied-to author by default), which previously made ANY reply to
+        // ANY bot message (e.g. a /track slash command output) falsely look
+        // like "@OM-Bot" was mentioned. Matching the literal <@id> text in
+        // the raw content avoids that false positive.
+        const mentionRegex    = new RegExp(`<@!?${client.user.id}>`);
+        const hasTypedMention = mentionRegex.test(raw);
+        const hasHeyOmmy      = lower.startsWith('hey ommy');
+
+        // Resolve the message this is replying to, if any — used both to
+        // detect a genuine continuation of Ommy's own conversation, and to
+        // pull in quoted context for explicit invocations (e.g. replying to
+        // someone else's message with "hey ommy translate it to english").
+        let repliedMessage = null;
+        if (message.reference?.messageId) {
+            repliedMessage = await message.fetchReference().catch(() => null);
+        }
+        const isReplyToOwnMessage = !!(repliedMessage && ommyMessageIds.has(repliedMessage.id));
+
         let prompt = null;
-        if (lower.startsWith('hey ommy')) {
+        if (hasHeyOmmy) {
             prompt = raw.slice(8).trim();
-        } else if (message.mentions.users.has(client.user.id)) {
+        } else if (hasTypedMention) {
             prompt = raw.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim();
+        } else if (isReplyToOwnMessage) {
+            // Plain reply to one of Ommy's own past answers — continue the
+            // conversation without requiring "hey ommy" again.
+            prompt = raw;
         }
         if (!prompt) return;
+
+        // Reply to someone else's message (not Ommy's own) while explicitly
+        // invoking Ommy — surface that message's content as context so Ommy
+        // can act on it directly (translate it, explain it, summarize it...)
+        // instead of only ever seeing the conversation with the requesting user.
+        if (repliedMessage && !isReplyToOwnMessage) {
+            const quotedAuthor = repliedMessage.member?.displayName || repliedMessage.author?.username || 'someone';
+            const quotedText   = (repliedMessage.content || '').trim();
+            if (quotedText) {
+                prompt = `${prompt}\n\n[Replying to a message from ${quotedAuthor}]: "${quotedText}"`;
+            }
+        }
 
         const displayName = message.member?.displayName || message.author.username;
 
