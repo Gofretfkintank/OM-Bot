@@ -1264,7 +1264,9 @@ RESPONSE FORMAT:
 async function sendOmmyReply(message, text) {
     const MAX = 1990;
     if (text.length <= MAX) {
-        return message.reply(text).catch(err => console.error('[OMMY REPLY]', err.message));
+        const sent = await message.reply(text).catch(err => { console.error('[OMMY REPLY]', err.message); return null; });
+        if (sent) trackOmmyMessageId(sent.id);
+        return sent;
     }
     const chunks  = [];
     let   current = '';
@@ -1278,9 +1280,11 @@ async function sendOmmyReply(message, text) {
         }
     }
     if (current) chunks.push(current);
-    await message.reply(chunks[0]).catch(err => console.error('[OMMY REPLY]', err.message));
+    const firstSent = await message.reply(chunks[0]).catch(err => { console.error('[OMMY REPLY]', err.message); return null; });
+    if (firstSent) trackOmmyMessageId(firstSent.id);
     for (let i = 1; i < chunks.length; i++) {
-        await message.channel.send(chunks[i]).catch(() => {});
+        const sent = await message.channel.send(chunks[i]).catch(() => null);
+        if (sent) trackOmmyMessageId(sent.id);
     }
 }
 
