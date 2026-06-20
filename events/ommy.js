@@ -303,6 +303,47 @@ async function resolveTargetMember(guild, query) {
     return null;
 }
 
+// Resolves a BANNED user (not a current member) to an ID — used by unban_member.
+async function resolveBannedUser(guild, query) {
+    if (!guild || !query) return null;
+    const trimmed = query.trim();
+
+    const mentionOrId = trimmed.match(/^<@!?(\d{15,20})>$/) || trimmed.match(/^(\d{15,20})$/);
+    if (mentionOrId) return mentionOrId[1];
+
+    try {
+        const bans = await guild.bans.fetch();
+        const match = bans.find(b =>
+            b.user.username.toLowerCase() === trimmed.toLowerCase() ||
+            b.user.tag.toLowerCase()      === trimmed.toLowerCase()
+        );
+        return match ? match.user.id : null;
+    } catch { return null; }
+}
+
+// Mirrors /lockchannel and /unlockchannel exactly.
+async function lockChannelHelper(channel, guild) {
+    const nonStaff = guild.roles.cache.filter(r =>
+        !r.permissions.has(PermissionsBitField.Flags.ManageMessages) &&
+        !r.permissions.has(PermissionsBitField.Flags.Administrator) &&
+        r.name !== '@everyone'
+    );
+    for (const [, role] of nonStaff)
+        await channel.permissionOverwrites.edit(role, { SendMessages: false }).catch(() => {});
+    await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false });
+}
+
+async function unlockChannelHelper(channel, guild) {
+    const nonStaff = guild.roles.cache.filter(r =>
+        !r.permissions.has(PermissionsBitField.Flags.ManageMessages) &&
+        !r.permissions.has(PermissionsBitField.Flags.Administrator) &&
+        r.name !== '@everyone'
+    );
+    for (const [, role] of nonStaff)
+        await channel.permissionOverwrites.edit(role, { SendMessages: null }).catch(() => {});
+    await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: true });
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // SCAN CHANNEL MESSAGES (with cache)
 // ══════════════════════════════════════════════════════════════════════════
