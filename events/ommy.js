@@ -971,6 +971,205 @@ async function executeTool(name, args, client, guildId, userPrompt, message) {
             }
         }
 
+        case 'unmute_member': {
+            if (!message?.member?.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+                return { error: 'permission_denied', message: 'You need the Moderate Members permission to do that.' };
+            }
+            const guild  = message.guild;
+            const target = await resolveTargetMember(guild, args.target || '');
+            if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
+            try {
+                await target.timeout(null);
+                return { success: true, unmuted: target.user.tag };
+            } catch (err) {
+                return { error: 'unmute_failed', message: err.message };
+            }
+        }
+
+        case 'kick_member': {
+            if (!message?.member?.permissions.has(PermissionsBitField.Flags.KickMembers)) {
+                return { error: 'permission_denied', message: 'You need the Kick Members permission to do that.' };
+            }
+            const guild  = message.guild;
+            const target = await resolveTargetMember(guild, args.target || '');
+            if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
+            if (target.id === message.author.id) return { error: 'invalid_target', message: 'You cannot kick yourself.' };
+            if (!target.kickable) return { error: 'cannot_kick', message: 'I cannot kick this member (role hierarchy).' };
+
+            const hasFullPower = message.author.id === COMMANDER_ID || message.member.roles.cache.has(CO_OWNER_ROLE_ID);
+            if (target.permissions.has(PermissionsBitField.Flags.ManageMessages) && !hasFullPower) {
+                return { error: 'invalid_target', message: 'Only Commander/Co-Owner can kick staff members.' };
+            }
+
+            try {
+                await target.kick(`${args.reason || 'No reason provided'} (via Ommy, requested by ${message.author.tag})`);
+                return { success: true, kicked: target.user.tag };
+            } catch (err) {
+                return { error: 'kick_failed', message: err.message };
+            }
+        }
+
+        case 'unban_member': {
+            if (!message?.member?.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+                return { error: 'permission_denied', message: 'You need the Ban Members permission to do that.' };
+            }
+            const guild  = message.guild;
+            const userId = await resolveBannedUser(guild, args.target || '');
+            if (!userId) return { error: 'not_found', message: `Could not find a banned user matching "${args.target}". Try the exact Discord ID.` };
+            try {
+                await guild.members.unban(userId);
+                return { success: true, unbanned: userId };
+            } catch (err) {
+                return { error: 'unban_failed', message: 'Invalid ID or user is not banned.' };
+            }
+        }
+
+        case 'warn_member': {
+            if (!message?.member?.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+                return { error: 'permission_denied', message: 'You need the Moderate Members permission to do that.' };
+            }
+            const guild  = message.guild;
+            const target = await resolveTargetMember(guild, args.target || '');
+            if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
+            if (!args.reason) return { error: 'missing_reason', message: 'A reason is required to issue a warning.' };
+            try {
+                let data = await Warn.findOne({ userId: target.id, guildId: guild.id });
+                if (!data) data = new Warn({ userId: target.id, guildId: guild.id, warns: [] });
+                data.warns.push({ reason: args.reason, moderator: `${message.author.tag} (via Ommy)`, date: new Date().toLocaleDateString() });
+                await data.save();
+                return { success: true, warned: target.user.tag, totalWarnings: data.warns.length };
+            } catch (err) {
+                return { error: 'warn_failed', message: err.message };
+            }
+        }
+
+        case 'get_warnings': {
+            if (!message?.member?.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+                return { error: 'permission_denied', message: 'You need the Moderate Members permission to do that.' };
+            }
+            const guild  = message.guild;
+            const target = await resolveTargetMember(guild, args.target || '');
+            if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
+            const data = await Warn.findOne({ userId: target.id, guildId: guild.id }).lean();
+            if (!data || data.warns.length === 0) return { found: true, username: target.user.tag, warnings: [] };
+            return {
+                found:    true,
+                username: target.user.tag,
+                count:    data.warns.length,
+                warnings: data.warns.map(w => ({ reason: w.reason, moderator: w.moderator, date: w.date }))
+            };
+        }
+
+        case 'clear_warnings': {
+            if (!message?.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                return { error: 'permission_denied', message: 'You need the Administrator permission to do that.' };
+            }
+            const guild  = message.guild;
+            const target = await resolveTargetMember(guild, args.target || '');
+            if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
+            try {
+                const result = await Warn.deleteMany({ userId: target.id, guildId: guild.id });
+                if (result.deletedCount === 0) return { error: 'none_found', message: `No warnings found for ${target.user.tag}.` };
+                return { success: true, username: target.user.tag, cleared: result.deletedCount };
+            } catch (err) {
+                return { error: 'clear_failed', message: err.message };
+            }
+        }
+
+        case 'set_nickname': {
+            if (!message?.member?.permissions.has(PermissionsBitField.Flags.ManageNicknames)) {
+                return { error: 'permission_denied', message: 'You need the Manage Nicknames permission to do that.' };
+            }
+            const guild  = message.guild;
+            const target = await resolveTargetMember(guild, args.target || '');
+            if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
+            if (!args.nickname) return { error: 'missing_nickname', message: 'A new nickname is required.' };
+            try {
+                await target.setNickname(args.nickname);
+                return { success: true, username: target.user.tag, nickname: args.nickname };
+            } catch (err) {
+                return { error: 'nickname_failed', message: err.message };
+            }
+        }
+
+        case 'dm_member': {
+            if (!message?.member?.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+                return { error: 'permission_denied', message: 'You need the Manage Messages permission to do that.' };
+            }
+            const guild  = message.guild;
+            const target = await resolveTargetMember(guild, args.target || '');
+            if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
+            if (!args.message) return { error: 'missing_message', message: 'Message content is required.' };
+            try {
+                await target.user.send(`📩 **Direct Message from ${guild.name}:**\n${args.message}`);
+                return { success: true, sentTo: target.user.tag };
+            } catch (err) {
+                return { error: 'dm_failed', message: 'This user has their DMs closed.' };
+            }
+        }
+
+        case 'lock_channel': {
+            if (!message?.member?.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+                return { error: 'permission_denied', message: 'You need the Manage Channels permission to do that.' };
+            }
+            try {
+                await lockChannelHelper(message.channel, message.guild);
+                return { success: true, channel: message.channel.name };
+            } catch (err) {
+                return { error: 'lock_failed', message: err.message };
+            }
+        }
+
+        case 'unlock_channel': {
+            if (!message?.member?.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+                return { error: 'permission_denied', message: 'You need the Manage Channels permission to do that.' };
+            }
+            try {
+                await unlockChannelHelper(message.channel, message.guild);
+                return { success: true, channel: message.channel.name };
+            } catch (err) {
+                return { error: 'unlock_failed', message: err.message };
+            }
+        }
+
+        case 'set_slowmode': {
+            if (!message?.member?.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+                return { error: 'permission_denied', message: 'You need the Manage Channels permission to do that.' };
+            }
+            const seconds = Number(args.seconds);
+            if (isNaN(seconds) || seconds < 0) return { error: 'invalid_value', message: 'Slowmode seconds must be a non-negative number.' };
+            try {
+                await message.channel.setRateLimitPerUser(seconds);
+                return { success: true, channel: message.channel.name, seconds };
+            } catch (err) {
+                return { error: 'slowmode_failed', message: err.message };
+            }
+        }
+
+        case 'report_member': {
+            const guild  = message.guild;
+            const target = await resolveTargetMember(guild, args.target || '');
+            if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
+            if (!args.reason) return { error: 'missing_reason', message: 'A reason is required to file a report.' };
+            const logChannel = guild.channels.cache.get(process.env.REPORT_LOG_ID);
+            if (!logChannel) return { error: 'no_log_channel', message: 'Staff log channel not configured.' };
+            try {
+                const embed = new EmbedBuilder()
+                    .setTitle('📩 New Report Received (via Ommy)')
+                    .addFields(
+                        { name: 'Reporter', value: message.author.tag, inline: true },
+                        { name: 'Target',   value: target.user.tag,    inline: true },
+                        { name: 'Reason',   value: args.reason }
+                    )
+                    .setColor('Red')
+                    .setTimestamp();
+                await logChannel.send({ embeds: [embed] });
+                return { success: true, reported: target.user.tag };
+            } catch (err) {
+                return { error: 'report_failed', message: err.message };
+            }
+        }
+
         default:
             return { error: 'Unknown function: ' + name };
     }
