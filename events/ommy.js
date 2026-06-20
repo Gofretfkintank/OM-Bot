@@ -258,6 +258,51 @@ async function resolveChannels(client, guildId, query) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// MODERATION HELPERS
+// Used by the ban_member / mute_member tools. Mirrors the logic already
+// used by /ban and /mute so behavior (duration parsing) stays consistent
+// across slash commands, prefix commands, and Ommy.
+// ══════════════════════════════════════════════════════════════════════════
+
+function parseDuration(str) {
+    const regex = /(\d+)([smhd])/g;
+    let totalMs = 0, match, found = false;
+    while ((match = regex.exec(str || '')) !== null) {
+        found = true;
+        const v = parseInt(match[1]);
+        switch (match[2]) {
+            case 's': totalMs += v * 1000; break;
+            case 'm': totalMs += v * 60 * 1000; break;
+            case 'h': totalMs += v * 60 * 60 * 1000; break;
+            case 'd': totalMs += v * 24 * 60 * 60 * 1000; break;
+        }
+    }
+    return found ? totalMs : null;
+}
+
+async function resolveTargetMember(guild, query) {
+    if (!guild || !query) return null;
+    const trimmed = query.trim();
+
+    const mentionOrId = trimmed.match(/^<@!?(\d{15,20})>$/) || trimmed.match(/^(\d{15,20})$/);
+    if (mentionOrId) {
+        return await guild.members.fetch(mentionOrId[1]).catch(() => null);
+    }
+
+    try {
+        const results = await guild.members.search({ query: trimmed, limit: 5 });
+        if (results.size > 0) {
+            const exact = results.find(m =>
+                m.user.username.toLowerCase() === trimmed.toLowerCase() ||
+                m.displayName.toLowerCase()    === trimmed.toLowerCase()
+            );
+            return exact || results.first();
+        }
+    } catch { /* fall through */ }
+    return null;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // SCAN CHANNEL MESSAGES (with cache)
 // ══════════════════════════════════════════════════════════════════════════
 
