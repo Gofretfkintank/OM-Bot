@@ -591,62 +591,99 @@ async function maybeSummariseUser(omUser, historySnapshot) {
 // GEMINI TOOL DEFINITIONS
 // ══════════════════════════════════════════════════════════════════════════
 
-const GEMINI_TOOLS = [{
-    functionDeclarations: [
-        {
-            name:        'get_leaderboard',
-            description: 'Fetch the OM League driver leaderboard with ratings and stats. Use for rankings, who is best, top drivers, overall standings.',
-            parameters: {
-                type: 'OBJECT',
-                properties: {
-                    limit: { type: 'INTEGER', description: 'Number of drivers to return (default 10, max 20)' }
-                }
-            }
-        },
-        {
-            name:        'get_driver_stats',
-            description: 'Fetch full stats and rating for a specific OM League driver by username.',
-            parameters: {
-                type: 'OBJECT',
-                properties: {
-                    username: { type: 'STRING', description: "The driver's Discord username" }
-                },
-                required: ['username']
-            }
-        },
-        {
-            name:        'get_panel_stats',
-            description: 'Fetch general OM League stats: total drivers, top winner, highest rated driver.',
-            parameters:  { type: 'OBJECT', properties: {} }
-        },
-        {
-            name:        'get_channel_image',
-            description: 'Read and analyze recent images in a Discord channel (or all channels in a matching category) using vision AI. Automatically considers multiple recent posts and their captions to find the one matching the season/round/date the user asked about — do not assume only the single latest image exists. Use for championship standings, race results, season tables, WCC/WDC standings. If given a category name (e.g. "mid-season", "championship"), scans all channels in that category.',
-            parameters: {
-                type: 'OBJECT',
-                properties: {
-                    channel: {
-                        type:        'STRING',
-                        description: 'Channel name, category name (e.g. "mid-season"), or channel ID. The bot will search all channels in a matching category if an exact channel is not found.'
-                    }
-                },
-                required: ['channel']
-            }
-        },
-        {
-            name:        'scan_channel_messages',
-            description: 'Read recent messages from a Discord channel (with caching — repeated calls within 2 hours return cached data). Use to understand server context, ongoing discussions, member activity, what people are talking about, or how members address each other. If the query matches a category name, all channels in that category are scanned.',
-            parameters: {
-                type: 'OBJECT',
-                properties: {
-                    channel: { type: 'STRING', description: 'Channel name, category name, or channel ID' },
-                    limit:   { type: 'INTEGER', description: 'Messages to read (default 40, max 100)' }
-                },
-                required: ['channel']
+const BASE_TOOL_DECLARATIONS = [
+    {
+        name:        'get_leaderboard',
+        description: 'Fetch the OM League driver leaderboard with ratings and stats. Use for rankings, who is best, top drivers, overall standings.',
+        parameters: {
+            type: 'object',
+            properties: {
+                limit: { type: 'integer', description: 'Number of drivers to return (default 10, max 20)' }
             }
         }
-    ]
-}];
+    },
+    {
+        name:        'get_driver_stats',
+        description: 'Fetch full stats and rating for a specific OM League driver by username.',
+        parameters: {
+            type: 'object',
+            properties: {
+                username: { type: 'string', description: "The driver's Discord username" }
+            },
+            required: ['username']
+        }
+    },
+    {
+        name:        'get_panel_stats',
+        description: 'Fetch general OM League stats: total drivers, top winner, highest rated driver.',
+        parameters:  { type: 'object', properties: {} }
+    },
+    {
+        name:        'get_channel_image',
+        description: 'Read and analyze recent images in a Discord channel (or all channels in a matching category) using vision AI. Automatically considers multiple recent posts and their captions to find the one matching the season/round/date the user asked about — do not assume only the single latest image exists. Use for championship standings, race results, season tables, WCC/WDC standings. If given a category name (e.g. "mid-season", "championship"), scans all channels in that category.',
+        parameters: {
+            type: 'object',
+            properties: {
+                channel: {
+                    type:        'string',
+                    description: 'Channel name, category name (e.g. "mid-season"), or channel ID. The bot will search all channels in a matching category if an exact channel is not found.'
+                }
+            },
+            required: ['channel']
+        }
+    },
+    {
+        name:        'scan_channel_messages',
+        description: 'Read recent messages from a Discord channel (with caching — repeated calls within 2 hours return cached data). Use to understand server context, ongoing discussions, member activity, what people are talking about, or how members address each other. If the query matches a category name, all channels in that category are scanned.',
+        parameters: {
+            type: 'object',
+            properties: {
+                channel: { type: 'string', description: 'Channel name, category name, or channel ID' },
+                limit:   { type: 'integer', description: 'Messages to read (default 40, max 100)' }
+            },
+            required: ['channel']
+        }
+    }
+];
+
+// Moderation tools — only ever appended to the tool list for admin/commander
+// callers (see getToolsForRole below). Execution also re-checks LIVE Discord
+// permissions on the requesting member regardless, so this is defense in
+// depth, not the only gate — a spoofed/stale role can never be enough on
+// its own to ban or mute someone.
+const MOD_TOOL_DECLARATIONS = [
+    {
+        name:        'ban_member',
+        description: 'Ban a member from the Discord server. Only ever offered to admins/commander. If the target is ambiguous, ask the user to clarify instead of guessing.',
+        parameters: {
+            type: 'object',
+            properties: {
+                target: { type: 'string', description: 'The member to ban — Discord username, display name, mention, or ID.' },
+                reason: { type: 'string', description: 'Reason for the ban.' }
+            },
+            required: ['target']
+        }
+    },
+    {
+        name:        'mute_member',
+        description: 'Timeout (mute) a member for a duration. Only ever offered to admins/commander. If the target is ambiguous, ask the user to clarify instead of guessing.',
+        parameters: {
+            type: 'object',
+            properties: {
+                target:   { type: 'string', description: 'The member to mute — Discord username, display name, mention, or ID.' },
+                duration: { type: 'string', description: 'Duration, e.g. "10m", "1h", "2d".' },
+                reason:   { type: 'string', description: 'Reason for the mute.' }
+            },
+            required: ['target', 'duration']
+        }
+    }
+];
+
+function getToolsForRole(role) {
+    const decls = [...BASE_TOOL_DECLARATIONS];
+    if (role === 'admin' || role === 'commander') decls.push(...MOD_TOOL_DECLARATIONS);
+    return [{ functionDeclarations: decls }];
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // TOOL EXECUTOR
