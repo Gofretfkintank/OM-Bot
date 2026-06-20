@@ -1310,6 +1310,21 @@ module.exports = (client) => {
             return message.reply('❌ Message too long! Keep it under 1000 characters. 🏎️');
         }
 
+        // ── Commander-only lock toggle — bypasses Gemini entirely while locked ──
+        if (message.author.id === COMMANDER_ID) {
+            if (/\bunlock yourself\b/i.test(prompt)) {
+                ommyLocked = false;
+                return message.reply('🔓 Unlocked. Back online.');
+            }
+            if (/\block yourself\b/i.test(prompt)) {
+                ommyLocked = true;
+                return message.reply('🔒 Locked by Gofret.');
+            }
+        }
+        if (ommyLocked) {
+            return message.reply("🔒 I'm locked by Gofret.");
+        }
+
         const role = detectRole(message);
 
         // Maintenance check
