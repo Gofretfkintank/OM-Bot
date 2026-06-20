@@ -730,6 +730,18 @@ const BASE_TOOL_DECLARATIONS = [
             },
             required: ['channel']
         }
+    },
+    {
+        name:        'report_member',
+        description: 'Report a member to the staff team — logs to the staff report channel. Available to EVERYONE, not just admins, since the underlying /report command has no permission gate. Use when a user explicitly asks to report someone.',
+        parameters: {
+            type: 'object',
+            properties: {
+                target: { type: 'string', description: 'The member being reported — Discord username, display name, mention, or ID.' },
+                reason: { type: 'string', description: 'Reason for the report.' }
+            },
+            required: ['target', 'reason']
+        }
     }
 ];
 
