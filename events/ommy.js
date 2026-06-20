@@ -775,6 +775,119 @@ const MOD_TOOL_DECLARATIONS = [
             },
             required: ['target', 'duration']
         }
+    },
+    {
+        name:        'unmute_member',
+        description: 'Remove an active timeout/mute from a member. Only ever offered to admins/commander.',
+        parameters: {
+            type: 'object',
+            properties: {
+                target: { type: 'string', description: 'The member to unmute — Discord username, display name, mention, or ID.' }
+            },
+            required: ['target']
+        }
+    },
+    {
+        name:        'kick_member',
+        description: 'Kick a member from the Discord server (they can rejoin with a new invite). Only ever offered to admins/commander.',
+        parameters: {
+            type: 'object',
+            properties: {
+                target: { type: 'string', description: 'The member to kick — Discord username, display name, mention, or ID.' },
+                reason: { type: 'string', description: 'Optional reason, included in the audit log.' }
+            },
+            required: ['target']
+        }
+    },
+    {
+        name:        'unban_member',
+        description: 'Remove a ban from a user so they can rejoin. Only ever offered to admins/commander.',
+        parameters: {
+            type: 'object',
+            properties: {
+                target: { type: 'string', description: 'The banned user — username, tag, or Discord ID. An exact ID is most reliable since banned users are no longer server members.' }
+            },
+            required: ['target']
+        }
+    },
+    {
+        name:        'warn_member',
+        description: 'Issue a formal warning to a member, logged in the warning system. Only ever offered to admins/commander.',
+        parameters: {
+            type: 'object',
+            properties: {
+                target: { type: 'string', description: 'The member to warn — Discord username, display name, mention, or ID.' },
+                reason: { type: 'string', description: 'Reason for the warning.' }
+            },
+            required: ['target', 'reason']
+        }
+    },
+    {
+        name:        'get_warnings',
+        description: "Look up a member's warning history. Only ever offered to admins/commander.",
+        parameters: {
+            type: 'object',
+            properties: {
+                target: { type: 'string', description: 'The member to check — Discord username, display name, mention, or ID.' }
+            },
+            required: ['target']
+        }
+    },
+    {
+        name:        'clear_warnings',
+        description: "Clear ALL of a member's warnings. Destructive and irreversible. Requires Administrator permission specifically (stricter than other mod tools). Confirm with the user first if there's any doubt about intent.",
+        parameters: {
+            type: 'object',
+            properties: {
+                target: { type: 'string', description: 'The member whose warnings to clear — Discord username, display name, mention, or ID.' }
+            },
+            required: ['target']
+        }
+    },
+    {
+        name:        'set_nickname',
+        description: "Change a member's server nickname. Only ever offered to admins/commander.",
+        parameters: {
+            type: 'object',
+            properties: {
+                target:   { type: 'string', description: 'The member to rename — Discord username, display name, mention, or ID.' },
+                nickname: { type: 'string', description: 'The new nickname.' }
+            },
+            required: ['target', 'nickname']
+        }
+    },
+    {
+        name:        'dm_member',
+        description: "Send a direct message to a member through the bot, on behalf of staff. Only ever offered to admins/commander. Send EXACTLY what the requesting admin asked to be sent — never compose your own persuasive, deceptive, or unrelated content.",
+        parameters: {
+            type: 'object',
+            properties: {
+                target:  { type: 'string', description: 'The member to DM — Discord username, display name, mention, or ID.' },
+                message: { type: 'string', description: 'The exact message content to send.' }
+            },
+            required: ['target', 'message']
+        }
+    },
+    {
+        name:        'lock_channel',
+        description: 'Lock the current channel so non-staff roles cannot send messages. Only ever offered to admins/commander.',
+        parameters: { type: 'object', properties: {} }
+    },
+    {
+        name:        'unlock_channel',
+        description: 'Unlock the current channel, restoring normal send permissions. Only ever offered to admins/commander.',
+        parameters: { type: 'object', properties: {} }
+    },
+    {
+        name:        'set_slowmode',
+        description: 'Set (or disable with 0) the slowmode rate-limit on the current channel. Only ever offered to admins/commander.',
+        parameters: {
+            type: 'object',
+            properties: {
+                seconds: { type: 'integer', description: 'Slowmode duration in seconds. 0 disables it.' }
+            },
+            required: ['seconds']
+        }
     }
 ];
 
