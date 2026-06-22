@@ -31,6 +31,7 @@ const Warn          = require('../models/Warn');
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const COMMANDER_ID         = '1097807544849809408';
+const OWNER_ID             = '1310904811100569681';
 const CO_OWNER_ROLE_ID     = '1447144645489328199';
 const PADDOCK_CATEGORY_ID  = '1447142057385918546'; // general/daily channels
 const CACHE_TTL_MS         = 2 * 60 * 60 * 1000;   // 2 hours
