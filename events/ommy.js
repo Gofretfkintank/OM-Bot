@@ -28,6 +28,7 @@ const OmmyUser      = require('../models/OmmyUser');
 const ChannelCache  = require('../models/ChannelCache');
 const Maintenance   = require('../models/Maintenance');
 const Warn          = require('../models/Warn');
+const { learnFromGuild, getKnowledgeContext } = require('../services/learner');
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const COMMANDER_ID         = '1097807544849809408';
