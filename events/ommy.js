@@ -1512,8 +1512,9 @@ module.exports = (client) => {
             buildBehaviorProfile(client, message.guildId, message.author.id, displayName);
         }
 
-        const personaTag   = buildPersonaTag(omUser, role, nick);
-        const systemPrompt = OMMY_SYSTEM_PROMPT_BASE + personaTag;
+        const personaTag    = buildPersonaTag(omUser, role, nick);
+        const knowledgeCtx  = await getKnowledgeContext(message.guildId);
+        const systemPrompt  = OMMY_SYSTEM_PROMPT_BASE + knowledgeCtx + personaTag;
 
         // Conversation history
         const histKey = `${message.guildId}-${message.author.id}`;
