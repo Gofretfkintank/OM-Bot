@@ -1247,11 +1247,6 @@ async function executeTool(name, args, client, guildId, userPrompt, message) {
         }
 
         case 'report_member': {
-            const guild  = message.guild;
-            const target = await resolveTargetMember(guild, args.target || '');
-            if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
-            if (!args.reason) return { error: 'missing_reason', message: 'A reason is required to file a report.' };
-            const logChannel = guild.channels.cache.get(process.env.REPORT_LOG_ID);
             if (!logChannel) return { error: 'no_log_channel', message: 'Staff log channel not configured.' };
             try {
                 const embed = new EmbedBuilder()
