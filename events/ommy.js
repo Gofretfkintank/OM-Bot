@@ -910,9 +910,27 @@ const MOD_TOOL_DECLARATIONS = [
     }
 ];
 
+// Commander-only tools — sadece Gofret'e sunulur
+const COMMANDER_TOOL_DECLARATIONS = [
+    {
+        name:        'learn_server',
+        description: 'Sunucu kanallarını Claude Sonnet 4.6 ile tarayarak OM ligi hakkında bilgi öğren ve MongoDB knowledge base\'e kaydet. Sadece Commander kullanabilir. args.channels = "all" tüm kanallar, yoksa kanal adı substring\'i (örn: "kural").',
+        parameters: {
+            type: 'object',
+            properties: {
+                channels: {
+                    type:        'string',
+                    description: '"all" tüm kanallar için, veya kanal adı substring\'i (örn: "kural", "duyuru", "genel")'
+                }
+            }
+        }
+    },
+];
+
 function getToolsForRole(role) {
     const decls = [...BASE_TOOL_DECLARATIONS];
     if (role === 'admin' || role === 'commander') decls.push(...MOD_TOOL_DECLARATIONS);
+    if (role === 'commander') decls.push(...COMMANDER_TOOL_DECLARATIONS);
     return [{ functionDeclarations: decls }];
 }
 
