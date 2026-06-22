@@ -1549,6 +1549,26 @@ module.exports = (client) => {
 
             const chat = model.startChat({ history: toGeminiHistory(safeHistory) });
 
+            // Build message content — text only, or multimodal if the user sent images
+            const imageAttachments = [...message.attachments.values()].filter(a =>
+                a.contentType?.startsWith('image/') ||
+                /\.(png|jpg|jpeg|gif|webp)$/i.test(a.name || '')
+            );
+
+            let messageContent = prompt;
+            if (imageAttachments.length > 0) {
+                const parts = [{ text: prompt || 'What do you see in this image?' }];
+                for (const att of imageAttachments.slice(0, 3)) {
+                    try {
+                        const imgRes = await axios.get(att.url, { responseType: 'arraybuffer', timeout: 10000 });
+                        const b64    = Buffer.from(imgRes.data).toString('base64');
+                        const mime   = (att.contentType || 'image/jpeg').split(';')[0];
+                        parts.push({ inlineData: { mimeType: mime, data: b64 } });
+                    } catch { /* skip unreachable attachment */ }
+                }
+                messageContent = parts;
+            }
+
             // Multi-round tool call loop.
             // Gemini may chain tool calls (e.g. get_channel_image fails → tries scan_channel_messages).
             // We keep executing until Gemini returns actual text or we hit the round limit.
