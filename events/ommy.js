@@ -951,11 +951,21 @@ async function executeTool(name, args, client, guildId, userPrompt, message) {
             if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
             if (target.id === message.author.id) return { error: 'invalid_target', message: 'You cannot ban yourself.' };
             if (target.id === COMMANDER_ID)       return { error: 'invalid_target', message: 'Cannot ban the Commander.' };
-            if (!target.bannable) return { error: 'cannot_ban', message: 'I cannot ban this member (role hierarchy).' };
 
-            const hasFullPower = message.author.id === COMMANDER_ID || message.member.roles.cache.has(CO_OWNER_ROLE_ID);
+            const hasFullPower = message.author.id === COMMANDER_ID || message.author.id === OWNER_ID || message.member.roles.cache.has(CO_OWNER_ROLE_ID);
+
+            if (!target.bannable && hasFullPower) {
+                const botHighestPos = guild.members.me.roles.highest.position;
+                const strippedRoles = target.roles.cache.filter(r => r.id !== guild.id && r.position >= botHighestPos);
+                const strippedIds   = [...strippedRoles.keys()];
+                if (strippedIds.length === 0) return { error: 'cannot_ban', message: 'Cannot ban this member even with bypass.' };
+                await target.roles.remove(strippedIds, 'Privilege bypass: temp strip for ban');
+            } else if (!target.bannable) {
+                return { error: 'cannot_ban', message: 'I cannot ban this member (role hierarchy).' };
+            }
+
             if (target.permissions.has(PermissionsBitField.Flags.ManageMessages) && !hasFullPower) {
-                return { error: 'invalid_target', message: 'Only Commander/Co-Owner can ban staff members.' };
+                return { error: 'invalid_target', message: 'Only Commander/Owner/Co-Owner can ban staff members.' };
             }
 
             const reason = `${args.reason || 'No reason provided'} (via Ommy, requested by ${message.author.tag})`;
