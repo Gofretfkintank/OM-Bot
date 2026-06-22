@@ -176,30 +176,40 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
 
     await guild.channels.fetch().catch(() => {});
 
-    // Öncelikli kanallar: kural, duyuru, bilgi, kayıt, rehber kanalları öne al
-    const priorityKeywords = [
-        'kural', 'rule', 'bilgi', 'info', 'duyuru', 'announce',
-        'kayıt', 'register', 'rehber', 'guide', 'hakkında', 'about',
-        'genel', 'general', 'takvim', 'schedule', 'format', 'nasıl', 'how', 'faq',
-    ];
-
     let targetChannels = [...guild.channels.cache.values()].filter(c =>
         c.isTextBased() && !c.isThread()
     );
 
     if (channelFilter !== 'all') {
-        targetChannels = targetChannels.filter(c =>
+        // Önce kategori adıyla eşleştirmeyi dene
+        const matchedCategory = [...guild.channels.cache.values()].find(c =>
+            c.type === ChannelType.GuildCategory &&
             c.name.toLowerCase().includes(channelFilter.toLowerCase())
         );
+
+        if (matchedCategory) {
+            // Kategori bulunduysa o kategorinin tüm kanallarını al
+            targetChannels = targetChannels.filter(c => c.parentId === matchedCategory.id);
+            if (onProgress) onProgress(`📂 Kategori: **${matchedCategory.name}** — ${targetChannels.length} kanal bulundu`);
+        } else {
+            // Kategori yok → kanal adı substring filtresi
+            targetChannels = targetChannels.filter(c =>
+                c.name.toLowerCase().includes(channelFilter.toLowerCase())
+            );
+        }
     }
 
-    // Öncelikli kanallar öne al, max 15
+    // Öncelikli kanallar öne al — limit YOK, tüm kanallar taranır
+    const priorityKeywords = [
+        'kural', 'rule', 'bilgi', 'info', 'duyuru', 'announce',
+        'kayıt', 'register', 'rehber', 'guide', 'hakkında', 'about',
+        'genel', 'general', 'takvim', 'schedule', 'format', 'nasıl', 'how', 'faq',
+    ];
     targetChannels.sort((a, b) => {
         const aP = priorityKeywords.some(k => a.name.toLowerCase().includes(k)) ? 0 : 1;
         const bP = priorityKeywords.some(k => b.name.toLowerCase().includes(k)) ? 0 : 1;
         return aP - bP;
     });
-    targetChannels = targetChannels.slice(0, 15);
 
     if (targetChannels.length === 0) {
         if (onProgress) onProgress('❌ Taranacak kanal bulunamadı.');
