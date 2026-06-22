@@ -5,7 +5,7 @@
 // Staff-only command.
 //--------------------------------
 
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const axios = require('axios');
 
 //--------------------------------
@@ -58,12 +58,6 @@ module.exports = {
         .setDescription('Toggle the Minecraft server on or off'),
 
     async execute(interaction) {
-
-        // Staff only
-        const member = await interaction.guild.members.fetch(interaction.user.id);
-        if (!member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
-            return interaction.reply({ content: '❌ Staff only.', ephemeral: true });
-        }
 
         await interaction.deferReply();
 
