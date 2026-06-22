@@ -9,6 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const OmKnowledge = require('../models/OmKnowledge');
+const { ChannelType } = require('discord.js');
 
 const MAX_MESSAGES_PER_CHANNEL = 80;
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
