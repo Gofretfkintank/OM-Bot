@@ -323,6 +323,14 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
 
     if (onProgress) onProgress(`📡 ${targetChannels.length} kanal taranacak...`);
 
+    // ── Kanal dizini pass'i — tüm sunucunun kanal yapısını öğren ──────────
+    // Bu sadece "all" scan'de veya channelFilter yoksa çalışır (yani tüm
+    // sunucuyu tararken kanal directory'sini de çıkar).
+    if (channelFilter === 'all') {
+        if (onProgress) onProgress('🗺️ Kanal dizini oluşturuluyor...');
+        await buildChannelDirectory(guild, guild.id, onProgress);
+    }
+
     let totalSaved = 0, totalUpdated = 0, channelsScanned = 0;
 
     for (const channel of targetChannels) {
