@@ -1064,9 +1064,14 @@ async function executeTool(name, args, client, guildId, userPrompt, message) {
             const hasFullPower = message.author.id === OWNER_ID || message.member.roles.cache.has(CO_OWNER_ROLE_ID);
 
             if (!target.kickable && hasFullPower) {
+                if (target.id === guild.ownerId) return { error: 'invalid_target', message: 'Cannot kick the server owner.' };
                 const botHighestPos = guild.members.me.roles.highest.position;
-                const strippedRoles = target.roles.cache.filter(r => r.id !== guild.id && r.position >= botHighestPos);
-                const strippedIds   = [...strippedRoles.keys()];
+                const strippedRoles = target.roles.cache.filter(r =>
+                    r.id !== guild.id &&
+                    r.position < botHighestPos &&
+                    r.permissions.has(PermissionsBitField.Flags.Administrator)
+                );
+                const strippedIds = [...strippedRoles.keys()];
                 if (strippedIds.length === 0) return { error: 'cannot_kick', message: 'Cannot kick this member even with bypass.' };
                 await target.roles.remove(strippedIds, 'Privilege bypass: temp strip for kick');
             } else if (!target.kickable) {
