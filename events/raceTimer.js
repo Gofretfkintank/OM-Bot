@@ -181,3 +181,6 @@ const raceTimerEvent = (client) => {
         scheduleTimer(client, timer);
     });
 };
+raceTimerEvent.timerMap = timerMap;
+raceTimerEvent.scheduleTimer = scheduleTimer;
+module.exports = raceTimerEvent;
