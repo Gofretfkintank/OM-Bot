@@ -1247,6 +1247,11 @@ async function executeTool(name, args, client, guildId, userPrompt, message) {
         }
 
         case 'report_member': {
+            const guild  = message.guild;
+            const target = await resolveTargetMember(guild, args.target || '');
+            if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
+            if (!args.reason) return { error: 'missing_reason', message: 'A reason is required to file a report.' };
+            const logChannel = guild.channels.cache.get(process.env.REPORT_LOG_ID);
             if (!logChannel) return { error: 'no_log_channel', message: 'Staff log channel not configured.' };
             try {
                 const embed = new EmbedBuilder()
@@ -1263,6 +1268,30 @@ async function executeTool(name, args, client, guildId, userPrompt, message) {
             } catch (err) {
                 return { error: 'report_failed', message: err.message };
             }
+        }
+
+        case 'learn_server': {
+            if (message.author.id !== COMMANDER_ID) {
+                return { error: 'permission_denied', message: 'Bu araç sadece Commander için.' };
+            }
+            // Fire-and-forget — background'da çalışır, ilerlemeyi kanala yazar
+            const channelFilter = args.channels || 'all';
+            ;(async () => {
+                const notify = (msg) => message.channel.send(msg).catch(() => {});
+                const result = await learnFromGuild(message.guild, channelFilter, notify);
+                if (result.error) {
+                    await notify(`❌ Öğrenme başarısız: ${result.error}`);
+                } else {
+                    await notify(
+                        `✅ **Öğrenme tamamlandı!**\n` +
+                        `📊 ${result.channelsScanned} kanal tarandı\n` +
+                        `💾 ${result.totalSaved} yeni bilgi | ${result.totalUpdated} güncelleme\n` +
+                        `🧠 Artık bilgilerimi kullanabilirim!`
+                    );
+                }
+            })().catch(err => console.error('[LEARN TOOL]', err.message));
+
+            return { success: true, message: `Öğrenme başlatıldı! Kanalları tarıyorum (filtre: "${channelFilter}"), ilerlemeyi buraya yazacağım...` };
         }
 
         default:
