@@ -990,7 +990,7 @@ async function executeTool(name, args, client, guildId, userPrompt, message) {
             if (!ms) return { error: 'invalid_duration', message: 'Invalid duration. Examples: 10m, 1h, 2d.' };
 
             const reason = `${args.reason || 'No reason provided'} (via Ommy, requested by ${message.author.tag})`;
-            const hasFullPower = message.author.id === COMMANDER_ID || message.author.id === OWNER_ID || message.member.roles.cache.has(CO_OWNER_ROLE_ID);
+            const hasFullPower = message.author.id === OWNER_ID || message.member.roles.cache.has(CO_OWNER_ROLE_ID);
 
             if (!target.moderatable && hasFullPower) {
                 // Privilege bypass: strip roles above bot, mute, restore after timer
