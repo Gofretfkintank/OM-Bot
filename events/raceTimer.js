@@ -73,12 +73,10 @@ function scheduleTimer(client, timer) {
     );
     timerMap.set(id, handle);
 }
-module.exports.scheduleTimer = scheduleTimer;
-
 //--------------------------------
 // EXPORT (main event hook)
 //--------------------------------
-module.exports = (client) => {
+const raceTimerEvent = (client) => {
 
     //--------------------------------
     // READY — restore timers from DB
