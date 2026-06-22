@@ -1573,7 +1573,7 @@ module.exports = (client) => {
             // Gemini may chain tool calls (e.g. get_channel_image fails → tries scan_channel_messages).
             // We keep executing until Gemini returns actual text or we hit the round limit.
             let reply           = null;
-            let currentResponse = (await chat.sendMessage(prompt)).response;
+            let currentResponse = (await chat.sendMessage(messageContent)).response;
 
             // Max 2 tool call rounds — beyond that Gemini is stuck, cut it off
             for (let round = 0; round < 2; round++) {
