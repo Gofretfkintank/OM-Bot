@@ -279,14 +279,14 @@ async function getKnowledgeContext(guildId) {
         if (!items.length) return '';
 
         const catLabels = {
-            registration: 'KAYIT & KATILIM',
-            race_format:  'YARIŞ FORMATI',
-            rules:        'KURALLAR & CEZA',
-            schedule:     'PROGRAM & TAKVİM',
-            roles:        'ROLLER',
-            channels:     'KANALLAR',
-            economy:      'EKONOMİ & PUANLAR',
-            general:      'GENEL',
+            registration: 'REGISTRATION & JOINING',
+            race_format:  'RACE FORMAT',
+            rules:        'RULES & PENALTIES',
+            schedule:     'SCHEDULE & CALENDAR',
+            roles:        'ROLES',
+            channels:     'CHANNELS',
+            economy:      'ECONOMY & POINTS',
+            general:      'GENERAL',
         };
 
         const grouped = {};
@@ -296,12 +296,12 @@ async function getKnowledgeContext(guildId) {
             grouped[cat].push(item.fact);
         }
 
-        let ctx = '\n\n---\n🧠 SUNUCU HAKKINDA ÖĞRENILEN BİLGİLER (kanal taramasından):\n';
+        let ctx = '\n\n---\n🧠 SERVER KNOWLEDGE BASE (learned from channel scan):\n';
         for (const [cat, facts] of Object.entries(grouped)) {
             ctx += `\n[${catLabels[cat] || cat.toUpperCase()}]\n`;
             for (const f of facts) ctx += `• ${f}\n`;
         }
-        ctx += '\nBu bilgileri kullan. Hardcode /register referansları artık bu öğrenilen bilgilerle değiştirilmiştir.\n---\n';
+        ctx += '\nUse this knowledge when answering. These facts were learned from scanning the server.\n---\n';
 
         return ctx;
     } catch (err) {
