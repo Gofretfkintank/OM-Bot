@@ -1051,7 +1051,7 @@ async function executeTool(name, args, client, guildId, userPrompt, message) {
             if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
             if (target.id === message.author.id) return { error: 'invalid_target', message: 'You cannot kick yourself.' };
 
-            const hasFullPower = message.author.id === COMMANDER_ID || message.author.id === OWNER_ID || message.member.roles.cache.has(CO_OWNER_ROLE_ID);
+            const hasFullPower = message.author.id === OWNER_ID || message.member.roles.cache.has(CO_OWNER_ROLE_ID);
 
             if (!target.kickable && hasFullPower) {
                 const botHighestPos = guild.members.me.roles.highest.position;
