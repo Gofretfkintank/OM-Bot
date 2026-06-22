@@ -1,7 +1,22 @@
-const { EmbedBuilder } = require('discord.js');
+// events/welcomeDM.js
+// Yeni üye DM'i:
+//  1. Statik embed (mevcut görsel + kanal linkleri) — her zaman gönderilir
+//  2. Gemini ile knowledge base'den üretilmiş kısa ek mesaj — varsa gönderilir
+
+const { EmbedBuilder }       = require('discord.js');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { getKnowledgeContext } = require('../services/learner');
 
 const BANNER_URL = 'https://cdn.discordapp.com/attachments/1486039954625790113/1498294574257279016/OMMr.png?ex=69f0a30f&is=69ef518f&hm=bc22ecc29576a6e207d21d53fe206cddd2a164d24759f0173e69fddeedb5b568&';
 const LOGO_URL   = 'https://cdn.discordapp.com/attachments/1486039954625790113/1498294579340771338/Untitled37_20251212225943-1.png?ex=69f0a310&is=69ef5190&hm=58b6c47cd41b0fae4a82aba820ec396dd219c0ddeb7ddfb7fc67f49122d101c8&';
+
+let _genAI = null;
+function getGemini() {
+    if (!_genAI && process.env.GEMINI_API_KEY) {
+        _genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    }
+    return _genAI;
+}
 
 module.exports = (client) => {
     const ALLOWED_GUILDS = [
@@ -12,6 +27,7 @@ module.exports = (client) => {
     client.on('guildMemberAdd', async member => {
         if (!ALLOWED_GUILDS.includes(member.guild.id)) return;
 
+        // ── 1. Statik embed — mevcut, her zaman gönder ──────────────────────
         const embed = new EmbedBuilder()
             .setColor('#1a1a1a')
             .setTitle('🏁 Welcome to Olzhasstik Motorsports!')
@@ -51,10 +67,52 @@ module.exports = (client) => {
 
         try {
             await member.user.send({ embeds: [embed] });
-            console.log(`[WELCOME DM] ✅ Sent to ${member.user.tag}`);
+            console.log(`[WELCOME DM] ✅ Embed gönderildi → ${member.user.tag}`);
         } catch (err) {
-            // User has DMs disabled — fail silently
-            console.warn(`[WELCOME DM] ⚠️ Could not DM ${member.user.tag}: ${err.message}`);
+            console.warn(`[WELCOME DM] ⚠️ DM kapalı → ${member.user.tag}: ${err.message}`);
+            return; // DM kapalıysa ek mesaj da gönderilemez, çık
+        }
+
+        // ── 2. Gemini ile knowledge base'den kısa ek mesaj (fire-and-forget) ─
+        try {
+            const knowledgeCtx = await getKnowledgeContext(member.guild.id);
+            if (!knowledgeCtx) return; // Henüz öğrenme yapılmamış, sadece embed yeterli
+
+            const genAI = getGemini();
+            if (!genAI) return;
+
+            const model = genAI.getGenerativeModel({
+                model: 'gemini-2.5-flash',
+                generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
+            });
+
+            const prompt = `Sen Olzhasstik Motorsports Discord sunucusunun yardımcı botu Ommy'sin.
+"${member.user.username}" isimli kişi sunucuya yeni katıldı.
+Aşağıdaki bilgilere dayanarak ona kısa, samimi, fazla heyecanlı olmayan bir ek karşılama mesajı yaz.
+
+KURALLAR:
+- Max 3-4 cümle
+- Türkçe (eğer isimden dil tahmin edilemiyorsa Türkçe yaz)
+- Mevcut sunucu bilgilerini kullan (kayıt, format, program vb.)
+- "Hoş geldin" ile başlama (embed zaten bunu söyledi)
+- Ommy olarak yaz, "ben bir AI değilim" demeni gerek yok
+- Fazla emoji koyma
+
+SUNUCU BİLGİLERİ:
+${knowledgeCtx}
+
+SADECE mesajı yaz, başka hiçbir şey ekleme.`;
+
+            const result  = await model.generateContent(prompt);
+            const aiText  = result.response.text()?.trim();
+
+            if (aiText && aiText.length > 10) {
+                await member.user.send(aiText);
+                console.log(`[WELCOME DM] ✅ AI ek mesaj gönderildi → ${member.user.tag}`);
+            }
+        } catch (err) {
+            // AI mesajı başarısız olsa bile embed zaten gitti, sorun değil
+            console.warn(`[WELCOME DM] AI mesaj hatası → ${err.message}`);
         }
     });
 };
