@@ -384,11 +384,18 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
 // ── Knowledge context → ommy.js system prompt injection ────────────────────
 async function getKnowledgeContext(guildId) {
     try {
-        const items = await OmKnowledge.find({ guildId, active: true })
+        // Channels kategorisi her zaman önce gelsin (navigasyon soruları için kritik)
+        const channelItems = await OmKnowledge.find({ guildId, active: true, category: 'channels' })
             .sort({ confidence: -1 })
-            .limit(40)
+            .limit(30)
             .lean();
 
+        const otherItems = await OmKnowledge.find({ guildId, active: true, category: { $ne: 'channels' } })
+            .sort({ confidence: -1 })
+            .limit(50)
+            .lean();
+
+        const items = [...channelItems, ...otherItems];
         if (!items.length) return '';
 
         const catLabels = {
