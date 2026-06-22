@@ -164,7 +164,112 @@ async function saveKnowledge(guildId, items) {
     return { saved, updated };
 }
 
-// ── Ana öğrenme fonksiyonu ──────────────────────────────────────────────────
+// ── Kanal dizini oluştur — tüm kanalların amacını tek Claude çağrısıyla öğren ──
+// Kanal adı + topic + kategori yapısını okur, "X kanalına git" tarzı
+// navigasyon bilgilerini channels:* olarak kaydeder.
+async function buildChannelDirectory(guild, guildId, onProgress = null) {
+    await guild.channels.fetch().catch(() => {});
+
+    // Kategori → kanallar yapısını oluştur
+    const categories = new Map(); // categoryName → [{name, topic}]
+    const uncategorized = [];
+
+    for (const [, ch] of guild.channels.cache) {
+        if (!ch.isTextBased() || ch.isThread()) continue;
+        const entry = {
+            name:  ch.name,
+            id:    ch.id,
+            topic: (ch.topic || '').slice(0, 200),
+        };
+        if (ch.parent) {
+            const cat = ch.parent.name;
+            if (!categories.has(cat)) categories.set(cat, []);
+            categories.get(cat).push(entry);
+        } else {
+            uncategorized.push(entry);
+        }
+    }
+
+    // Tek bir metin bloğu oluştur
+    let structureText = '';
+    for (const [catName, channels] of categories) {
+        structureText += `\n[KATEGORİ: ${catName}]\n`;
+        for (const ch of channels) {
+            structureText += `  #${ch.name}`;
+            if (ch.topic) structureText += ` — topic: "${ch.topic}"`;
+            structureText += '\n';
+        }
+    }
+    if (uncategorized.length > 0) {
+        structureText += '\n[KATEGORİSİZ]\n';
+        for (const ch of uncategorized) {
+            structureText += `  #${ch.name}`;
+            if (ch.topic) structureText += ` — topic: "${ch.topic}"`;
+            structureText += '\n';
+        }
+    }
+
+    if (!structureText.trim()) return { saved: 0, updated: 0 };
+
+    const system = `You are building a channel directory for a sim-racing Discord server called Olzhasstik Motorsports (OM).
+
+You will receive the full channel structure: category names, channel names, and their topics.
+
+Your job: For each channel where you can confidently describe its PURPOSE and what a member should DO there, generate a concise English fact. Focus on ACTION-ORIENTED descriptions — what should a user go to this channel for?
+
+Special attention to channels for:
+- Applying for roles (FIA, pit crew, safety car, marshal, steward, etc.)
+- Registering for championships or seasons
+- Submitting complaints, reports, or tickets
+- Finding rules, guides, or info
+- Race announcements, standings, results
+- Economy / casino / bot commands
+
+RULES:
+- Only include channels where the purpose is reasonably clear from the name or topic
+- Skip generic channels (general chat, off-topic, memes) unless they have a clear topic
+- English only, 1-2 sentences per fact
+- Key must be snake_case, unique, descriptive (e.g. "ticket_channel_purpose")
+
+Return ONLY valid JSON, nothing else:
+{
+  "channels": [
+    {
+      "channelName": "ticket",
+      "key": "ticket_channel_purpose",
+      "fact": "The #ticket channel is where members submit applications for staff or official roles such as FIA, pit crew, safety car (SC), and marshal — open a ticket there to apply."
+    }
+  ]
+}`;
+
+    const user = `Server channel structure:\n${structureText}`;
+
+    try {
+        const raw    = await callClaude(system, user);
+        const json   = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        const parsed = JSON.parse(json);
+
+        const items = (parsed.channels || []).map(ch => ({
+            category:   'channels',
+            key:        `channel_dir_${ch.key}`,
+            fact:       ch.fact,
+            confidence: 0.9,
+            sources:    [{ channelId: '', channelName: ch.channelName, messageSnippet: '' }],
+        }));
+
+        if (items.length === 0) return { saved: 0, updated: 0 };
+
+        const result = await saveKnowledge(guildId, items);
+        if (onProgress) onProgress(`🗺️ Kanal dizini: ${items.length} kanal öğrenildi (${result.saved} yeni, ${result.updated} güncellendi)`);
+        return result;
+    } catch (err) {
+        console.error('[LEARNER] buildChannelDirectory:', err.message);
+        if (onProgress) onProgress(`⚠️ Kanal dizini oluşturulamadı: ${err.message.slice(0, 80)}`);
+        return { saved: 0, updated: 0 };
+    }
+}
+
+
 // @param guild         Discord Guild objesi
 // @param channelFilter "all" veya kanal ismi substring'i
 // @param onProgress    (string) => void  — ilerleme callback'i
