@@ -985,12 +985,40 @@ async function executeTool(name, args, client, guildId, userPrompt, message) {
             const target = await resolveTargetMember(guild, args.target || '');
             if (!target) return { error: 'not_found', message: `Could not find a member matching "${args.target}".` };
             if (target.id === message.author.id) return { error: 'invalid_target', message: 'You cannot mute yourself.' };
-            if (!target.moderatable) return { error: 'cannot_mute', message: 'I cannot mute this member (role hierarchy).' };
 
             const ms = parseDuration(args.duration || '');
             if (!ms) return { error: 'invalid_duration', message: 'Invalid duration. Examples: 10m, 1h, 2d.' };
 
             const reason = `${args.reason || 'No reason provided'} (via Ommy, requested by ${message.author.tag})`;
+            const hasFullPower = message.author.id === COMMANDER_ID || message.author.id === OWNER_ID || message.member.roles.cache.has(CO_OWNER_ROLE_ID);
+
+            if (!target.moderatable && hasFullPower) {
+                // Privilege bypass: strip roles above bot, mute, restore after timer
+                const botHighestPos = guild.members.me.roles.highest.position;
+                const strippedRoles = target.roles.cache.filter(r => r.id !== guild.id && r.position >= botHighestPos);
+                const strippedIds   = [...strippedRoles.keys()];
+                if (strippedIds.length === 0) return { error: 'cannot_mute', message: 'Cannot mute this member even with bypass.' };
+
+                await target.roles.remove(strippedIds, 'Privilege bypass: temp strip for mute');
+                try {
+                    await target.timeout(ms, reason);
+                } catch (err) {
+                    await target.roles.add(strippedIds, 'Privilege bypass: restore after failed mute').catch(() => {});
+                    return { error: 'mute_failed', message: err.message };
+                }
+                setTimeout(async () => {
+                    try {
+                        const refreshed = await guild.members.fetch(target.id).catch(() => null);
+                        if (refreshed) await refreshed.roles.add(strippedIds, 'Privilege bypass: role restore after mute expiry');
+                    } catch (err) {
+                        console.error('[OMMY BYPASS] Role restore failed:', err.message);
+                    }
+                }, ms);
+                return { success: true, muted: target.user.tag, duration: args.duration, bypass: true };
+            }
+
+            if (!target.moderatable) return { error: 'cannot_mute', message: 'I cannot mute this member (role hierarchy).' };
+
             try {
                 await target.timeout(ms, reason);
                 return { success: true, muted: target.user.tag, duration: args.duration };
