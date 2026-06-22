@@ -914,7 +914,7 @@ const MOD_TOOL_DECLARATIONS = [
 const COMMANDER_TOOL_DECLARATIONS = [
     {
         name:        'learn_server',
-        description: 'Sunucu kanallarını Claude Sonnet 4.6 ile tarayarak OM ligi hakkında bilgi öğren ve MongoDB knowledge base\'e kaydet. Sadece Commander kullanabilir. Kategori adı verince o kategorinin TÜM kanallarını tarar (örn: "Information" → o kategorideki tüm kanallar). "all" tüm sunucuyu tarar.',
+        description: 'Scan server channels with Claude Sonnet to learn about the OM league and save to MongoDB knowledge base. Commander only. Triggers: "learn server", "learn whole server", "scan all channels", "sunucuyu öğren", "kanalları tara". Use channels="all" for everything, or a category/channel name (e.g. "Information", "Rules") to scan just that category.',
         parameters: {
             type: 'object',
             properties: {
