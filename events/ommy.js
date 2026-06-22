@@ -1343,6 +1343,7 @@ async function sendOmmyReply(message, text) {
 
 function detectRole(message) {
     if (message.author.id === COMMANDER_ID) return 'commander';
+    if (message.author.id === OWNER_ID)     return 'admin';
     if (message.member?.roles.cache.has(CO_OWNER_ROLE_ID)) return 'admin';
     if (message.member?.permissions.has(PermissionsBitField.Flags.ManageMessages)) return 'admin';
     return 'member';
