@@ -27,7 +27,6 @@ const raceKeywords = [
 // Exported so race-delay.js can clearTimeout + reschedule
 //--------------------------------
 const timerMap = new Map();
-module.exports.timerMap = timerMap;
 
 //--------------------------------
 // FIRE HELPER — marks notified, sends race-time replies
