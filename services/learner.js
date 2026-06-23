@@ -593,7 +593,7 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
     // Bu sadece "all" scan'de veya channelFilter yoksa çalışır (yani tüm
     // sunucuyu tararken kanal directory'sini de çıkar).
     if (channelFilter === 'all') {
-        if (onProgress) onProgress('🗺️ Kanal dizini oluşturuluyor...');
+        if (onProgress) onProgress('🗺️ Building channel directory...');
         await buildChannelDirectory(guild, guild.id, onProgress);
     }
 
