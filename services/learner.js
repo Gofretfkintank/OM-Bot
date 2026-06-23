@@ -328,7 +328,7 @@ Categories: registration | general`;
                 const r = await saveKnowledge(guildId, items);
                 totalSaved   += r.saved;
                 totalUpdated += r.updated;
-                if (onProgress) onProgress(`✅ #${forumName} (başvurular) — ${items.length} bilgi (${r.saved} yeni, ${r.updated} güncellendi)`);
+                if (onProgress) onProgress(`✅ #${forumName} (applications) — ${items.length} facts (${r.saved} new, ${r.updated} updated)`);
             }
         } catch (err) {
             console.error(`[LEARNER] Forum text parse #${forumName}:`, err.message);
