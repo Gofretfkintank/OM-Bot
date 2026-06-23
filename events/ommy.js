@@ -178,6 +178,19 @@ async function getCachedOrFetch(client, guildId, channel, limit = 40) {
                 time:    msg.createdAt.toISOString().slice(11, 16),
             });
         }
+        // Pinned mesajları da ekle (önemli bilgiler genellikle pinlenir)
+        try {
+            const pinned = await channel.messages.fetchPinned();
+            for (const [, msg] of pinned) {
+                if (!msg.content) continue;
+                const alreadyIn = entries.some(e => e.content.includes(msg.content.slice(0, 60)));
+                if (!alreadyIn) entries.push({
+                    author:  msg.author.username,
+                    content: `[PINNED] ${msg.content.slice(0, 300)}`,
+                    time:    msg.createdAt.toISOString().slice(11, 16),
+                });
+            }
+        } catch { /* skip */ }
     } catch (err) {
         return { error: `Cannot read #${channel.name}: ${err.message}` };
     }
