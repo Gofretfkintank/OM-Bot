@@ -657,7 +657,7 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
 
         } catch (err) {
             console.error(`[LEARNER] Kanal ${channel.name}:`, err.message);
-            if (onProgress) onProgress(`❌ #${channel.name} — hata: ${err.message.slice(0, 60)}`);
+            if (onProgress) onProgress(`❌ #${channel.name} — error: ${err.message.slice(0, 60)}`);
         }
     }
 
