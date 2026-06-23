@@ -162,7 +162,7 @@ Categories: registration | race_format | rules | schedule | roles | channels | e
             }],
         }));
     } catch (err) {
-        console.error(`[LEARNER] #${channelName} parse hatası:`, err.message);
+        console.error(`[LEARNER] #${channelName} parse error:`, err.message);
         return [];
     }
 }
