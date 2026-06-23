@@ -429,12 +429,12 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
         return aP - bP;
     });
 
-    if (targetChannels.length === 0) {
+    if (targetChannels.length === 0 && forumChannels.length === 0) {
         if (onProgress) onProgress('❌ Taranacak kanal bulunamadı.');
         return { error: 'No channels found' };
     }
 
-    if (onProgress) onProgress(`📡 ${targetChannels.length} kanal taranacak...`);
+    if (onProgress) onProgress(`📡 ${targetChannels.length} text + ${forumChannels.length} forum kanal taranacak...`);
 
     // ── Kanal dizini pass'i — tüm sunucunun kanal yapısını öğren ──────────
     // Bu sadece "all" scan'de veya channelFilter yoksa çalışır (yani tüm
