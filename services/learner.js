@@ -222,7 +222,7 @@ async function saveKnowledge(guildId, items) {
 // ── Forum kanalını tara (her thread = bir başvuru/içerik) ─────────────────
 async function scanForumChannel(forumChannel, guildId, onProgress = null) {
     const forumName = forumChannel.name;
-    if (onProgress) onProgress(`📋 Forum taranıyor: #${forumName}`);
+    if (onProgress) onProgress(`📋 Scanning forum: #${forumName}`);
 
     let allThreads = [];
     try {
