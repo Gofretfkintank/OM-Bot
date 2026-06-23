@@ -587,7 +587,7 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
         return { error: 'No channels found' };
     }
 
-    if (onProgress) onProgress(`📡 ${targetChannels.length} text + ${forumChannels.length} forum kanal taranacak...`);
+    if (onProgress) onProgress(`📡 Scanning ${targetChannels.length} text + ${forumChannels.length} forum channels...`);
 
     // ── Kanal dizini pass'i — tüm sunucunun kanal yapısını öğren ──────────
     // Bu sadece "all" scan'de veya channelFilter yoksa çalışır (yani tüm
