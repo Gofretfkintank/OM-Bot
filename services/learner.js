@@ -385,7 +385,7 @@ Categories: general | race_format`;
                 const r = await saveKnowledge(guildId, items);
                 totalSaved   += r.saved;
                 totalUpdated += r.updated;
-                if (onProgress) onProgress(`🗺️ "${thread.title}" — ${images.length} resim → ${items.length} bilgi (${r.saved} yeni)`);
+                if (onProgress) onProgress(`🗺️ "${thread.title}" — ${images.length} images → ${items.length} facts (${r.saved} new)`);
             }
 
             await new Promise(r => setTimeout(r, 800));
