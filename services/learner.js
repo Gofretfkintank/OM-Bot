@@ -630,7 +630,7 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
                 });
             }
 
-            if (entries.length < 3) continue;
+            if (entries.length < 1) continue;
 
             // Staff mesajları öne al (daha güvenilir bilgi kaynağı)
             const ordered = [
