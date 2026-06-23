@@ -301,7 +301,7 @@ async function buildChannelDirectory(guild, guildId, onProgress = null) {
     for (const [catName, channels] of categories) {
         structureText += `\n[KATEGORİ: ${catName}]\n`;
         for (const ch of channels) {
-            structureText += `  #${ch.name}`;
+            structureText += `  #${ch.name} [${ch.type || 'text'}]`;
             if (ch.topic) structureText += ` — topic: "${ch.topic}"`;
             structureText += '\n';
         }
