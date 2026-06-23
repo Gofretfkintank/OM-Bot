@@ -486,7 +486,7 @@ Return ONLY valid JSON, nothing else:
     const user = `Server channel structure:\n${structureText}`;
 
     try {
-        const raw    = await callClaude(system, user);
+        const raw    = await callClaude(system, user, 4096);
         const json   = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
         const parsed = JSON.parse(json);
 
