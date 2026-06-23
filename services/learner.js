@@ -17,7 +17,7 @@ const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 // ── Claude API çağrısı (native fetch, SDK gerektirmez) ─────────────────────
 async function callClaude(systemPrompt, userPrompt, maxTokens = 2048) {
     const apiKey = process.env.CLAUDE_API_KEY;
-    if (!apiKey) throw new Error('CLAUDE_API_KEY env var eksik.');
+    if (!apiKey) throw new Error('CLAUDE_API_KEY env var is missing.');
 
     const res = await fetch(CLAUDE_API_URL, {
         method:  'POST',
