@@ -630,6 +630,29 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
                 });
             }
 
+            // Pinned mesajları da çek — önemli bilgiler genellikle pinlenir
+            try {
+                const pinned = await channel.messages.fetchPinned();
+                for (const [, msg] of pinned) {
+                    let textContent = msg.content?.trim() || '';
+                    for (const emb of msg.embeds || []) {
+                        const parts = [];
+                        if (emb.title)       parts.push(`[${emb.title}]`);
+                        if (emb.description) parts.push(emb.description);
+                        for (const f of emb.fields || []) parts.push(`${f.name}: ${f.value}`);
+                        if (parts.length > 0) textContent = textContent ? textContent + '\n' + parts.join('\n') : parts.join('\n');
+                    }
+                    if (textContent.length < 15) continue;
+                    // Pinned'i zaten varsa duplicate olmasın
+                    const alreadyIn = entries.some(e => e.content.includes(textContent.slice(0, 80)));
+                    if (!alreadyIn) entries.push({
+                        author:  msg.author.username,
+                        content: `[PINNED] ${textContent.slice(0, 800)}`,
+                        isStaff: true, // pinned = staff onaylı bilgi
+                    });
+                }
+            } catch { /* pinned fetch başarısız, devam */ }
+
             if (entries.length < 1) continue;
 
             // Staff mesajları öne al (daha güvenilir bilgi kaynağı)
