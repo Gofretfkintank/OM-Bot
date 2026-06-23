@@ -235,7 +235,7 @@ async function scanForumChannel(forumChannel, guildId, onProgress = null) {
     }
 
     if (allThreads.length === 0) {
-        if (onProgress) onProgress(`⬛ #${forumName} — hiç thread bulunamadı`);
+        if (onProgress) onProgress(`⬛ #${forumName} — no threads found`);
         return { saved: 0, updated: 0 };
     }
 
