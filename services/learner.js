@@ -391,7 +391,7 @@ Categories: general | race_format`;
             await new Promise(r => setTimeout(r, 800));
         } catch (err) {
             console.error(`[LEARNER] Forum vision #${thread.title}:`, err.message);
-            if (onProgress) onProgress(`⚠️ "${thread.title}" resim analizi başarısız: ${err.message.slice(0, 50)}`);
+            if (onProgress) onProgress(`⚠️ "${thread.title}" image analysis failed: ${err.message.slice(0, 50)}`);
         }
     }
 
