@@ -442,7 +442,7 @@ async function buildChannelDirectory(guild, guildId, onProgress = null) {
         }
     }
     if (uncategorized.length > 0) {
-        structureText += '\n[KATEGORİSİZ]\n';
+        structureText += '\n[UNCATEGORIZED]\n';
         for (const ch of uncategorized) {
             structureText += `  #${ch.name}`;
             if (ch.topic) structureText += ` — topic: "${ch.topic}"`;
