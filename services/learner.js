@@ -434,7 +434,7 @@ async function buildChannelDirectory(guild, guildId, onProgress = null) {
     // Tek bir metin bloğu oluştur
     let structureText = '';
     for (const [catName, channels] of categories) {
-        structureText += `\n[KATEGORİ: ${catName}]\n`;
+        structureText += `\n[CATEGORY: ${catName}]\n`;
         for (const ch of channels) {
             structureText += `  #${ch.name} [${ch.type || 'text'}]`;
             if (ch.topic) structureText += ` — topic: "${ch.topic}"`;
