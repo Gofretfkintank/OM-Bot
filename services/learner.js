@@ -587,10 +587,27 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
             const entries = [];
 
             for (const [, msg] of fetched) {
-                if (!msg.content || msg.content.length < 15) continue;
+                let textContent = msg.content?.trim() || '';
+
+                // Embed içeriğini de çek (kural kitabı, duyuru gibi embed mesajlar)
+                for (const emb of msg.embeds || []) {
+                    const parts = [];
+                    if (emb.title)       parts.push(`[${emb.title}]`);
+                    if (emb.description) parts.push(emb.description);
+                    for (const f of emb.fields || []) {
+                        parts.push(`${f.name}: ${f.value}`);
+                    }
+                    if (parts.length > 0) {
+                        textContent = textContent
+                            ? textContent + '\n' + parts.join('\n')
+                            : parts.join('\n');
+                    }
+                }
+
+                if (textContent.length < 15) continue;
                 entries.push({
                     author:  msg.author.username,
-                    content: msg.content.slice(0, 500),
+                    content: textContent.slice(0, 800),
                     isStaff: !!(msg.member?.permissions.has(8n)), // Administrator
                 });
             }
