@@ -282,7 +282,7 @@ async function scanForumChannel(forumChannel, guildId, onProgress = null) {
     }
 
     if (threads.length === 0) {
-        if (onProgress) onProgress(`⬛ #${forumName} — okunabilir içerik bulunamadı`);
+        if (onProgress) onProgress(`⬛ #${forumName} — no readable content found`);
         return { saved: 0, updated: 0 };
     }
 
