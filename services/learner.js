@@ -107,31 +107,31 @@ async function learnFromMessages(channelName, channelId, messages) {
         .map(m => `[${m.isStaff ? 'STAFF' : 'ÜYE'}] ${m.author}: ${m.content}`)
         .join('\n');
 
-    const system = `Sen Olzhasstik Motorsports (OM) Discord sunucusu için bilgi çıkarma asistanısın.
-Discord kanallarındaki mesajlardan sunucu hakkında kalıcı, yapılandırılmış bilgiler çıkarıyorsun.
+    const system = `You are a knowledge extraction assistant for Olzhasstik Motorsports (OM) Discord server.
+You extract permanent, structured facts about the server from Discord channel messages.
 
-ÇIKAR:
-- Kayıt / katılım süreci
-- Yarış formatı ve nasıl işlediği
-- Sunucu / yarış kuralları, ceza sistemi
-- Etkinlik programı, yarış günleri
-- Roller ve anlamları
-- Kanalların amaçları
-- Puan/ekonomi sistemi
-- Genel sunucu bilgisi
+EXTRACT:
+- Registration / joining process
+- Race format and how it works
+- Server / race rules, penalty system
+- Event schedule, race days
+- Roles and their meanings
+- Channel purposes
+- Points / economy system
+- General server info
 
-ÇIKARMA:
-- Günlük sohbet, selamlama, geçici tartışmalar
-- Yarış sonuçları veya anlık haberler
-- Kişisel mesajlar
+DO NOT EXTRACT:
+- Casual chat, greetings, temporary discussions
+- Race results or live news
+- Personal messages
 
-KURALLAR:
-- Sadece mesajlarda açıkça söylenen şeyleri yaz, yorum yapma
-- Her fact İngilizce, net, 1-3 cümle max
-- Confidence: staffin yazdıysa 0.9+, üyenin yazdıysa 0.7
-- Öğrenilecek kalıcı bilgi yoksa boş dizi döndür
+RULES:
+- Only write what is explicitly stated in the messages — no interpretation
+- Each fact in English, clear, 1-3 sentences max
+- Confidence: 0.9+ if written by staff, 0.7 if by member
+- If there is no permanent knowledge to learn, return an empty array
 
-SADECE geçerli JSON döndür, başka hiçbir şey yazma:
+Return ONLY valid JSON, nothing else:
 {
   "knowledge": [
     {
@@ -143,9 +143,9 @@ SADECE geçerli JSON döndür, başka hiçbir şey yazma:
   ]
 }
 
-Kategoriler: registration | race_format | rules | schedule | roles | channels | economy | general`;
+Categories: registration | race_format | rules | schedule | roles | channels | economy | general`;
 
-    const user = `Kanal: #${channelName}\n\nMesajlar:\n${messagesText}`;
+    const user = `Channel: #${channelName}\n\nMessages:\n${messagesText}`;
 
     try {
         const raw  = await callClaude(system, user);
