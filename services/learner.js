@@ -164,6 +164,109 @@ async function saveKnowledge(guildId, items) {
     return { saved, updated };
 }
 
+// ── Forum kanalını tara (her thread = bir başvuru formu) ──────────────────
+async function scanForumChannel(forumChannel, guildId, onProgress = null) {
+    const forumName = forumChannel.name;
+    if (onProgress) onProgress(`📋 Forum taranıyor: #${forumName}`);
+
+    let allThreads = [];
+    try {
+        const { threads: active }   = await forumChannel.threads.fetchActive();
+        const { threads: archived } = await forumChannel.threads.fetchArchived({ limit: 100 });
+        allThreads = [...active.values(), ...archived.values()];
+    } catch (err) {
+        console.error(`[LEARNER] Forum thread fetch hatası #${forumName}:`, err.message);
+        return { saved: 0, updated: 0 };
+    }
+
+    if (allThreads.length === 0) {
+        if (onProgress) onProgress(`⬛ #${forumName} — hiç thread bulunamadı`);
+        return { saved: 0, updated: 0 };
+    }
+
+    // Her thread'in starter message'ını oku (asıl başvuru formu)
+    const applications = [];
+    for (const thread of allThreads) {
+        try {
+            const msgs   = await thread.messages.fetch({ limit: 10 });
+            const sorted = [...msgs.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+            const starter = sorted[0];
+            if (!starter || !starter.content || starter.content.length < 20) continue;
+            applications.push({
+                threadTitle: thread.name,
+                author:      starter.author.username,
+                content:     starter.content.slice(0, 800),
+            });
+        } catch { /* erişilemeyen thread'i atla */ }
+        await new Promise(r => setTimeout(r, 300));
+    }
+
+    if (applications.length === 0) {
+        if (onProgress) onProgress(`⬛ #${forumName} — okunabilir başvuru bulunamadı`);
+        return { saved: 0, updated: 0 };
+    }
+
+    const system = `You are extracting structured knowledge from a Discord forum channel in a sim-racing league called Olzhasstik Motorsports (OM League).
+
+Each "thread" below is a driver or team application. Extract facts that would help answer:
+- "What number does X prefer?"
+- "Where is X from?"
+- "What team does X want to join?"
+- "What does the application process require?"
+
+RULES:
+- English only
+- No private real-name or address data — Discord username is fine
+- Prefer driver-specific facts when clear (preferred number, nationality, team choice)
+- Also extract any structural facts about the application format/required fields
+- 1-2 sentences per fact, confidence 0.85
+- key: snake_case, unique
+
+Return ONLY valid JSON:
+{
+  "knowledge": [
+    {
+      "category": "registration",
+      "key": "pilot_preferred_number_gofretfkintank",
+      "fact": "Driver gofretfkintank's preferred racing number is 7.",
+      "confidence": 0.85
+    }
+  ]
+}
+
+Categories: registration | general`;
+
+    const threadDump = applications
+        .map((a, i) => `--- Thread ${i + 1}: "${a.threadTitle}" (by ${a.author}) ---\n${a.content}`)
+        .join('\n\n');
+
+    const user = `Forum channel: #${forumName}\nTotal applications: ${applications.length}\n\n${threadDump}`;
+
+    try {
+        const raw    = await callClaude(system, user);
+        const json   = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        const parsed = JSON.parse(json);
+
+        const items = (parsed.knowledge || []).map(item => ({
+            ...item,
+            sources: [{ channelId: forumChannel.id, channelName: forumName, messageSnippet: '' }],
+        }));
+
+        if (items.length === 0) {
+            if (onProgress) onProgress(`⬛ #${forumName} — çıkarılabilir bilgi bulunamadı`);
+            return { saved: 0, updated: 0 };
+        }
+
+        const result = await saveKnowledge(guildId, items);
+        if (onProgress) onProgress(`✅ #${forumName} — ${applications.length} başvurudan ${items.length} bilgi (${result.saved} yeni, ${result.updated} güncellendi)`);
+        return result;
+    } catch (err) {
+        console.error(`[LEARNER] Forum #${forumName} parse hatası:`, err.message);
+        if (onProgress) onProgress(`❌ #${forumName} — parse hatası: ${err.message.slice(0, 60)}`);
+        return { saved: 0, updated: 0 };
+    }
+}
+
 // ── Kanal dizini oluştur — tüm kanalların amacını tek Claude çağrısıyla öğren ──
 // Kanal adı + topic + kategori yapısını okur, "X kanalına git" tarzı
 // navigasyon bilgilerini channels:* olarak kaydeder.
