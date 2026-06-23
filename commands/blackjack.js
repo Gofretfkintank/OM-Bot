@@ -199,6 +199,13 @@ module.exports = {
                 doubled = true;
 
                 playerHand.push(deck.pop());
+                const ddTotal = handTotal(playerHand);
+                if (ddTotal > 21) {
+                    collector.stop('bust');
+                    const bustEmbed = buildEmbed(playerHand, dealerHand, false, currentBet,
+                        `💥 **Bust! You lose ${currentBet.toLocaleString()} 🪙** *(doubled down)*`, 0xff4444);
+                    return msg.edit({ embeds: [bustEmbed], components: [buildButtons(true)] });
+                }
                 collector.stop('stand'); // auto-stand after double
             }
 
