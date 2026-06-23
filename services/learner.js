@@ -559,7 +559,7 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
         if (matchedCategory) {
             targetChannels = targetChannels.filter(c => c.parentId === matchedCategory.id);
             forumChannels  = forumChannels.filter(c => c.parentId === matchedCategory.id);
-            if (onProgress) onProgress(`📂 Kategori: **${matchedCategory.name}** — ${targetChannels.length} text + ${forumChannels.length} forum kanal`);
+            if (onProgress) onProgress(`📂 Category: **${matchedCategory.name}** — ${targetChannels.length} text + ${forumChannels.length} forum channels`);
         } else {
             targetChannels = targetChannels.filter(c =>
                 c.name.toLowerCase().includes(channelFilter.toLowerCase())
