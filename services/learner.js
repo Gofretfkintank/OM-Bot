@@ -583,7 +583,7 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
     });
 
     if (targetChannels.length === 0 && forumChannels.length === 0) {
-        if (onProgress) onProgress('❌ Taranacak kanal bulunamadı.');
+        if (onProgress) onProgress('❌ No channels found to scan.');
         return { error: 'No channels found' };
     }
 
