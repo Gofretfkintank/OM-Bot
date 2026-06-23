@@ -454,7 +454,7 @@ async function buildChannelDirectory(guild, guildId, onProgress = null) {
 
     const system = `You are building a channel directory for a sim-racing Discord server called Olzhasstik Motorsports (OM).
 
-You will receive the full channel structure: category names, channel names, and their topics.
+You will receive a PARTIAL channel structure: category names, channel names, and their topics.
 
 Your job: For each channel where you can confidently describe its PURPOSE and what a member should DO there, generate a concise English fact. Focus on ACTION-ORIENTED descriptions — what should a user go to this channel for?
 
@@ -471,8 +471,8 @@ RULES:
 - Skip generic channels (general chat, off-topic, memes) unless they have a clear topic
 - English only, 1-2 sentences per fact
 - Key must be snake_case, unique, descriptive (e.g. "ticket_channel_purpose")
+- Return ONLY valid JSON, nothing else — no markdown, no extra text
 
-Return ONLY valid JSON, nothing else:
 {
   "channels": [
     {
@@ -483,31 +483,49 @@ Return ONLY valid JSON, nothing else:
   ]
 }`;
 
-    const user = `Server channel structure:\n${structureText}`;
-
-    try {
-        const raw    = await callClaude(system, user, 4096);
-        const json   = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-        const parsed = JSON.parse(json);
-
-        const items = (parsed.channels || []).map(ch => ({
-            category:   'channels',
-            key:        `channel_dir_${ch.key}`,
-            fact:       ch.fact,
-            confidence: 0.9,
-            sources:    [{ channelId: '', channelName: ch.channelName, messageSnippet: '' }],
-        }));
-
-        if (items.length === 0) return { saved: 0, updated: 0 };
-
-        const result = await saveKnowledge(guildId, items);
-        if (onProgress) onProgress(`🗺️ Kanal dizini: ${items.length} kanal öğrenildi (${result.saved} yeni, ${result.updated} güncellendi)`);
-        return result;
-    } catch (err) {
-        console.error('[LEARNER] buildChannelDirectory:', err.message);
-        if (onProgress) onProgress(`⚠️ Kanal dizini oluşturulamadı: ${err.message.slice(0, 80)}`);
-        return { saved: 0, updated: 0 };
+    // Kanal satırlarını topla, 20'lik batch'lere böl
+    const allLines = structureText.split('\n').filter(l => l.trim());
+    const BATCH_SIZE = 20;
+    const batches = [];
+    for (let i = 0; i < allLines.length; i += BATCH_SIZE) {
+        batches.push(allLines.slice(i, i + BATCH_SIZE).join('\n'));
     }
+
+    let totalSaved = 0, totalUpdated = 0, totalItems = 0;
+
+    for (let i = 0; i < batches.length; i++) {
+        const user = `Server channel structure (batch ${i + 1}/${batches.length}):\n${batches[i]}`;
+        try {
+            const raw    = await callClaude(system, user, 2048);
+            const json   = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+            const parsed = JSON.parse(json);
+
+            const items = (parsed.channels || []).map(ch => ({
+                category:   'channels',
+                key:        `channel_dir_${ch.key}`,
+                fact:       ch.fact,
+                confidence: 0.9,
+                sources:    [{ channelId: '', channelName: ch.channelName, messageSnippet: '' }],
+            }));
+
+            if (items.length > 0) {
+                const result = await saveKnowledge(guildId, items);
+                totalSaved   += result.saved;
+                totalUpdated += result.updated;
+                totalItems   += items.length;
+            }
+
+            await new Promise(r => setTimeout(r, 500));
+        } catch (err) {
+            console.error(`[LEARNER] buildChannelDirectory batch ${i + 1}:`, err.message);
+            if (onProgress) onProgress(`⚠️ Kanal dizini batch ${i + 1} hatası: ${err.message.slice(0, 60)}`);
+        }
+    }
+
+    if (totalItems > 0 && onProgress) {
+        onProgress(`🗺️ Kanal dizini: ${totalItems} kanal öğrenildi (${totalSaved} yeni, ${totalUpdated} güncellendi)`);
+    }
+    return { saved: totalSaved, updated: totalUpdated };
 }
 
 
