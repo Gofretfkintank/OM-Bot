@@ -1574,7 +1574,22 @@ module.exports = (client) => {
             // Gemini may chain tool calls (e.g. get_channel_image fails → tries scan_channel_messages).
             // We keep executing until Gemini returns actual text or we hit the round limit.
             let reply           = null;
-            let currentResponse = (await chat.sendMessage(messageContent)).response;
+            let currentResponse;
+            if (Array.isArray(messageContent) && messageContent.some(p => p.inlineData)) {
+                // Multimodal send — if Gemini rejects (size limit, tools+vision conflict, etc.)
+                // fall back to text-only so the outer catch never fires on image issues.
+                try {
+                    currentResponse = (await chat.sendMessage(messageContent)).response;
+                } catch (visionErr) {
+                    console.warn('[OMMY VISION SEND] Multimodal failed, retrying text-only:', visionErr?.message || visionErr);
+                    const textOnly = messageContent.find(p => p.text)?.text || prompt;
+                    currentResponse = (await chat.sendMessage(
+                        textOnly + '\n\n[System note: The user attached an image but it could not be processed — let them know you could not read the image this time, and ask them to describe it or try again.]'
+                    )).response;
+                }
+            } else {
+                currentResponse = (await chat.sendMessage(messageContent)).response;
+            }
 
             // Max 2 tool call rounds — beyond that Gemini is stuck, cut it off
             for (let round = 0; round < 2; round++) {
