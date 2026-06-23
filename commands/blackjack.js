@@ -234,7 +234,10 @@ module.exports = {
 
             let result, color, payout = 0;
 
-            if (dealerTotal > 21 || playerTotal > dealerTotal) {
+            if (playerTotal > 21) {
+                result = `💥 **Bust! You lose ${currentBet.toLocaleString()} 🪙**${doubled ? ' *(doubled down)*' : ''}`;
+                color = 0xff4444;
+            } else if (dealerTotal > 21 || playerTotal > dealerTotal) {
                 payout = currentBet * 2;
                 result = `🏆 **You win! +${payout.toLocaleString()} 🪙**`;
                 color = 0x00c851;
