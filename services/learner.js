@@ -219,7 +219,7 @@ async function saveKnowledge(guildId, items) {
     return { saved, updated };
 }
 
-// ── Forum kanalını tara (her thread = bir başvuru formu) ──────────────────
+// ── Forum kanalını tara (her thread = bir başvuru/içerik) ─────────────────
 async function scanForumChannel(forumChannel, guildId, onProgress = null) {
     const forumName = forumChannel.name;
     if (onProgress) onProgress(`📋 Forum taranıyor: #${forumName}`);
@@ -239,87 +239,167 @@ async function scanForumChannel(forumChannel, guildId, onProgress = null) {
         return { saved: 0, updated: 0 };
     }
 
-    // Her thread'in starter message'ını oku (asıl başvuru formu)
-    const applications = [];
+    // Her thread'den mesajları + resimleri topla
+    const threads = [];
     for (const thread of allThreads) {
         try {
-            const msgs   = await thread.messages.fetch({ limit: 10 });
+            const msgs   = await thread.messages.fetch({ limit: 20 });
             const sorted = [...msgs.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-            const starter = sorted[0];
-            if (!starter || !starter.content || starter.content.length < 20) continue;
-            applications.push({
-                threadTitle: thread.name,
-                author:      starter.author.username,
-                content:     starter.content.slice(0, 800),
+            if (sorted.length === 0) continue;
+
+            // Tüm mesajların text içeriğini birleştir
+            const textContent = sorted
+                .map(m => m.content?.trim())
+                .filter(Boolean)
+                .join('\n---\n')
+                .slice(0, 1500);
+
+            // Tüm mesajlardaki resim attachment'larını topla
+            const imageUrls = [];
+            for (const msg of sorted) {
+                for (const [, att] of msg.attachments) {
+                    const mime = att.contentType || '';
+                    if (mime.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp)$/i.test(att.name || '')) {
+                        imageUrls.push({ url: att.url, mimeType: mime || 'image/jpeg' });
+                    }
+                }
+                // Embed içindeki resimler
+                for (const emb of msg.embeds || []) {
+                    if (emb.image?.url) imageUrls.push({ url: emb.image.url, mimeType: 'image/jpeg' });
+                    if (emb.thumbnail?.url) imageUrls.push({ url: emb.thumbnail.url, mimeType: 'image/jpeg' });
+                }
+            }
+
+            threads.push({
+                title:     thread.name,
+                author:    sorted[0].author.username,
+                text:      textContent,
+                imageUrls: imageUrls.slice(0, 5), // max 5 resim per thread
             });
         } catch { /* erişilemeyen thread'i atla */ }
+
         await new Promise(r => setTimeout(r, 300));
     }
 
-    if (applications.length === 0) {
-        if (onProgress) onProgress(`⬛ #${forumName} — okunabilir başvuru bulunamadı`);
+    if (threads.length === 0) {
+        if (onProgress) onProgress(`⬛ #${forumName} — okunabilir içerik bulunamadı`);
         return { saved: 0, updated: 0 };
     }
 
-    const system = `You are extracting structured knowledge from a Discord forum channel in a sim-racing league called Olzhasstik Motorsports (OM League).
+    // Thread'leri ikiye ayır: resimli (pist haritası vs.) ve text-only (başvuru)
+    const imageThreads = threads.filter(t => t.imageUrls.length > 0);
+    const textThreads  = threads.filter(t => t.imageUrls.length === 0);
 
-Each "thread" below is a driver or team application. Extract facts that would help answer:
+    let totalSaved = 0, totalUpdated = 0;
+
+    // ── Text-only thread'ler (başvuru formları) ────────────────────────────
+    if (textThreads.length > 0) {
+        const system = `You are extracting structured knowledge from a Discord forum channel in a sim-racing league called Olzhasstik Motorsports (OM League).
+
+Each "thread" is a driver or team application. Extract facts to answer:
 - "What number does X prefer?"
 - "Where is X from?"
 - "What team does X want to join?"
-- "What does the application process require?"
+- "What does the application require?"
 
 RULES:
-- English only
-- No private real-name or address data — Discord username is fine
-- Prefer driver-specific facts when clear (preferred number, nationality, team choice)
-- Also extract any structural facts about the application format/required fields
-- 1-2 sentences per fact, confidence 0.85
-- key: snake_case, unique
+- English only. No private real names/addresses — Discord username is fine
+- Driver-specific facts preferred (preferred number, nationality, team choice)
+- Also extract structural facts about the application format
+- 1-2 sentences, confidence 0.85, key: snake_case unique
 
 Return ONLY valid JSON:
-{
-  "knowledge": [
-    {
-      "category": "registration",
-      "key": "pilot_preferred_number_gofretfkintank",
-      "fact": "Driver gofretfkintank's preferred racing number is 7.",
-      "confidence": 0.85
-    }
-  ]
-}
-
+{ "knowledge": [{ "category": "registration", "key": "pilot_preferred_number_gofretfkintank", "fact": "Driver gofretfkintank prefers racing number 7.", "confidence": 0.85 }] }
 Categories: registration | general`;
 
-    const threadDump = applications
-        .map((a, i) => `--- Thread ${i + 1}: "${a.threadTitle}" (by ${a.author}) ---\n${a.content}`)
-        .join('\n\n');
+        const dump = textThreads
+            .map((t, i) => `--- Thread ${i + 1}: "${t.title}" (by ${t.author}) ---\n${t.text}`)
+            .join('\n\n');
 
-    const user = `Forum channel: #${forumName}\nTotal applications: ${applications.length}\n\n${threadDump}`;
-
-    try {
-        const raw    = await callClaude(system, user);
-        const json   = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-        const parsed = JSON.parse(json);
-
-        const items = (parsed.knowledge || []).map(item => ({
-            ...item,
-            sources: [{ channelId: forumChannel.id, channelName: forumName, messageSnippet: '' }],
-        }));
-
-        if (items.length === 0) {
-            if (onProgress) onProgress(`⬛ #${forumName} — çıkarılabilir bilgi bulunamadı`);
-            return { saved: 0, updated: 0 };
+        try {
+            const raw    = await callClaude(system, `Forum: #${forumName}\n\n${dump}`);
+            const json   = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+            const parsed = JSON.parse(json);
+            const items  = (parsed.knowledge || []).map(item => ({
+                ...item,
+                sources: [{ channelId: forumChannel.id, channelName: forumName, messageSnippet: '' }],
+            }));
+            if (items.length > 0) {
+                const r = await saveKnowledge(guildId, items);
+                totalSaved   += r.saved;
+                totalUpdated += r.updated;
+                if (onProgress) onProgress(`✅ #${forumName} (başvurular) — ${items.length} bilgi (${r.saved} yeni, ${r.updated} güncellendi)`);
+            }
+        } catch (err) {
+            console.error(`[LEARNER] Forum text parse #${forumName}:`, err.message);
         }
-
-        const result = await saveKnowledge(guildId, items);
-        if (onProgress) onProgress(`✅ #${forumName} — ${applications.length} başvurudan ${items.length} bilgi (${result.saved} yeni, ${result.updated} güncellendi)`);
-        return result;
-    } catch (err) {
-        console.error(`[LEARNER] Forum #${forumName} parse hatası:`, err.message);
-        if (onProgress) onProgress(`❌ #${forumName} — parse hatası: ${err.message.slice(0, 60)}`);
-        return { saved: 0, updated: 0 };
     }
+
+    // ── Resimli thread'ler (pist haritaları, araç resimleri vs.) ──────────
+    for (const thread of imageThreads) {
+        try {
+            // Resimleri base64'e çevir
+            const images = [];
+            for (const imgRef of thread.imageUrls) {
+                const img = await fetchImageAsBase64(imgRef.url);
+                if (img) images.push(img);
+            }
+            if (images.length === 0) continue;
+
+            const system = `You are analyzing images from a Discord forum thread in a sim-racing league called Olzhasstik Motorsports (OM League).
+
+The thread may contain track maps, circuit layouts, car liveries, or other sim-racing visuals.
+
+If this is a TRACK MAP or CIRCUIT LAYOUT:
+- Describe the circuit characteristics (technical, fast, street circuit, etc.)
+- Note key corners, chicanes, hairpins
+- Identify likely overtaking spots (after long straights, heavy braking zones)
+- Note any unusual or distinctive features
+- Give an overall difficulty/character assessment
+
+If this is something else (car livery, settings screenshot, etc.):
+- Describe what you see and what's relevant to a sim-racing league
+
+RULES:
+- English only, factual observations only
+- 1-3 facts per image, each 1-2 sentences, confidence 0.8
+- key: snake_case unique (e.g. "track_monza_layout", "track_baku_overtaking")
+
+Return ONLY valid JSON:
+{ "knowledge": [{ "category": "general", "key": "track_baku_layout", "fact": "The Baku street circuit features a long main straight ideal for DRS overtaking into T1, combined with a very tight castle section with narrow walls requiring precise driving.", "confidence": 0.8 }] }
+Categories: general | race_format`;
+
+            const textHint = thread.text
+                ? `Thread title: "${thread.title}"\nText content: ${thread.text.slice(0, 300)}`
+                : `Thread title: "${thread.title}"`;
+
+            const raw    = await callClaudeVision(system, textHint, images);
+            const json   = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+            const parsed = JSON.parse(json);
+            const items  = (parsed.knowledge || []).map(item => ({
+                ...item,
+                sources: [{ channelId: forumChannel.id, channelName: thread.title, messageSnippet: '' }],
+            }));
+
+            if (items.length > 0) {
+                const r = await saveKnowledge(guildId, items);
+                totalSaved   += r.saved;
+                totalUpdated += r.updated;
+                if (onProgress) onProgress(`🗺️ "${thread.title}" — ${images.length} resim → ${items.length} bilgi (${r.saved} yeni)`);
+            }
+
+            await new Promise(r => setTimeout(r, 800));
+        } catch (err) {
+            console.error(`[LEARNER] Forum vision #${thread.title}:`, err.message);
+            if (onProgress) onProgress(`⚠️ "${thread.title}" resim analizi başarısız: ${err.message.slice(0, 50)}`);
+        }
+    }
+
+    if (totalSaved + totalUpdated === 0) {
+        if (onProgress) onProgress(`⬛ #${forumName} — çıkarılabilir bilgi bulunamadı`);
+    }
+
+    return { saved: totalSaved, updated: totalUpdated };
 }
 
 // ── Kanal dizini oluştur — tüm kanalların amacını tek Claude çağrısıyla öğren ──
