@@ -518,7 +518,7 @@ RULES:
             await new Promise(r => setTimeout(r, 500));
         } catch (err) {
             console.error(`[LEARNER] buildChannelDirectory batch ${i + 1}:`, err.message);
-            if (onProgress) onProgress(`⚠️ Kanal dizini batch ${i + 1} hatası: ${err.message.slice(0, 60)}`);
+            if (onProgress) onProgress(`⚠️ Channel directory batch ${i + 1} error: ${err.message.slice(0, 60)}`);
         }
     }
 
