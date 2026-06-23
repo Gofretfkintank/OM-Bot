@@ -646,10 +646,10 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
                 totalUpdated += updated;
                 channelsScanned++;
                 if (onProgress) {
-                    onProgress(`✅ #${channel.name} — ${items.length} bilgi (${saved} yeni, ${updated} güncellendi)`);
+                    onProgress(`✅ #${channel.name} — ${items.length} facts (${saved} new, ${updated} updated)`);
                 }
             } else {
-                if (onProgress) onProgress(`⬛ #${channel.name} — kalıcı bilgi bulunamadı`);
+                if (onProgress) onProgress(`⬛ #${channel.name} — no useful facts found`);
             }
 
             // Claude API rate limit koruması
