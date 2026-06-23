@@ -671,7 +671,7 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
             await new Promise(r => setTimeout(r, 1000));
         } catch (err) {
             console.error(`[LEARNER] Forum ${forumChannel.name}:`, err.message);
-            if (onProgress) onProgress(`❌ #${forumChannel.name} — hata: ${err.message.slice(0, 60)}`);
+            if (onProgress) onProgress(`❌ #${forumChannel.name} — error: ${err.message.slice(0, 60)}`);
         }
     }
 
