@@ -278,11 +278,14 @@ async function buildChannelDirectory(guild, guildId, onProgress = null) {
     const uncategorized = [];
 
     for (const [, ch] of guild.channels.cache) {
-        if (!ch.isTextBased() || ch.isThread()) continue;
+        const isText  = ch.isTextBased() && !ch.isThread();
+        const isForum = ch.type === ChannelType.GuildForum;
+        if (!isText && !isForum) continue;
         const entry = {
             name:  ch.name,
             id:    ch.id,
             topic: (ch.topic || '').slice(0, 200),
+            type:  isForum ? 'forum' : 'text',
         };
         if (ch.parent) {
             const cat = ch.parent.name;
