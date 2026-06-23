@@ -491,6 +491,20 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
         }
     }
 
+    // ── Forum kanallarını tara ──────────────────────────────────────────────
+    for (const forumChannel of forumChannels) {
+        try {
+            const { saved, updated } = await scanForumChannel(forumChannel, guild.id, onProgress);
+            totalSaved   += saved;
+            totalUpdated += updated;
+            if (saved + updated > 0) channelsScanned++;
+            await new Promise(r => setTimeout(r, 1000));
+        } catch (err) {
+            console.error(`[LEARNER] Forum ${forumChannel.name}:`, err.message);
+            if (onProgress) onProgress(`❌ #${forumChannel.name} — hata: ${err.message.slice(0, 60)}`);
+        }
+    }
+
     return { channelsScanned, totalSaved, totalUpdated };
 }
 
