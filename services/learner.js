@@ -396,7 +396,7 @@ Categories: general | race_format`;
     }
 
     if (totalSaved + totalUpdated === 0) {
-        if (onProgress) onProgress(`⬛ #${forumName} — çıkarılabilir bilgi bulunamadı`);
+        if (onProgress) onProgress(`⬛ #${forumName} — no extractable facts found`);
     }
 
     return { saved: totalSaved, updated: totalUpdated };
