@@ -523,7 +523,7 @@ RULES:
     }
 
     if (totalItems > 0 && onProgress) {
-        onProgress(`🗺️ Kanal dizini: ${totalItems} kanal öğrenildi (${totalSaved} yeni, ${totalUpdated} güncellendi)`);
+        onProgress(`🗺️ Channel directory: ${totalItems} channels learned (${totalSaved} new, ${totalUpdated} updated)`);
     }
     return { saved: totalSaved, updated: totalUpdated };
 }
