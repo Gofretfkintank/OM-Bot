@@ -387,24 +387,31 @@ async function learnFromGuild(guild, channelFilter = 'all', onProgress = null) {
 
     await guild.channels.fetch().catch(() => {});
 
+    // Text kanalları
     let targetChannels = [...guild.channels.cache.values()].filter(c =>
         c.isTextBased() && !c.isThread()
     );
 
+    // Forum kanalları
+    let forumChannels = [...guild.channels.cache.values()].filter(c =>
+        c.type === ChannelType.GuildForum
+    );
+
     if (channelFilter !== 'all') {
-        // Önce kategori adıyla eşleştirmeyi dene
         const matchedCategory = [...guild.channels.cache.values()].find(c =>
             c.type === ChannelType.GuildCategory &&
             c.name.toLowerCase().includes(channelFilter.toLowerCase())
         );
 
         if (matchedCategory) {
-            // Kategori bulunduysa o kategorinin tüm kanallarını al
             targetChannels = targetChannels.filter(c => c.parentId === matchedCategory.id);
-            if (onProgress) onProgress(`📂 Kategori: **${matchedCategory.name}** — ${targetChannels.length} kanal bulundu`);
+            forumChannels  = forumChannels.filter(c => c.parentId === matchedCategory.id);
+            if (onProgress) onProgress(`📂 Kategori: **${matchedCategory.name}** — ${targetChannels.length} text + ${forumChannels.length} forum kanal`);
         } else {
-            // Kategori yok → kanal adı substring filtresi
             targetChannels = targetChannels.filter(c =>
+                c.name.toLowerCase().includes(channelFilter.toLowerCase())
+            );
+            forumChannels = forumChannels.filter(c =>
                 c.name.toLowerCase().includes(channelFilter.toLowerCase())
             );
         }
