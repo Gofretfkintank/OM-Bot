@@ -1656,8 +1656,47 @@ module.exports = (client) => {
             sendOmmyReply(message, reply);
 
         } catch (err) {
+            const is503 = err?.status === 503 || (err?.message || '').includes('503') || (err?.message || '').includes('Service Unavailable');
             console.error('[OMMY BOT ERROR]', err?.status || '', err?.message || err);
             console.error('[OMMY STACK]', err?.stack?.split('\n').slice(0, 3).join(' | '));
+
+            if (is503) {
+                console.warn('[OMMY] 503 on gemini-2.5-flash — switching to gemini-2.0-flash');
+                try {
+                    const fbModel = getGemini().getGenerativeModel({
+                        model:             'gemini-2.0-flash',
+                        tools:             getToolsForRole(role),
+                        systemInstruction: systemPrompt,
+                        generationConfig:  { temperature: 0.8, maxOutputTokens: 2048 },
+                    });
+                    const fbChat     = fbModel.startChat({ history: toGeminiHistory(safeHistory) });
+                    let   fbResponse = (await fbChat.sendMessage(prompt)).response;
+
+                    // One round of tool calls on fallback
+                    const fbCalls = fbResponse.functionCalls?.() || [];
+                    if (fbCalls.length > 0) {
+                        const fbFnResponses = [];
+                        for (const fc of fbCalls) {
+                            let toolResult;
+                            try { toolResult = await executeTool(fc.name, fc.args || {}, client, message.guildId, prompt, message); }
+                            catch { toolResult = { error: 'Tool failed.' }; }
+                            const resObj = toolResult && typeof toolResult === 'object' ? toolResult : { result: toolResult };
+                            fbFnResponses.push({ functionResponse: { name: fc.name, response: resObj } });
+                        }
+                        fbResponse = (await fbChat.sendMessage(fbFnResponses)).response;
+                    }
+
+                    const fbReply = fbResponse.text()?.trim();
+                    if (fbReply) {
+                        history.push({ role: 'user', content: prompt });
+                        history.push({ role: 'assistant', content: fbReply });
+                        return sendOmmyReply(message, fbReply);
+                    }
+                } catch (fbErr) {
+                    console.error('[OMMY FALLBACK ERROR]', fbErr?.message);
+                }
+            }
+
             message.reply('🔧 Ommy hit the wall — engine failure! Try again in a moment. 🏎️').catch(() => {});
         } finally {
             clearInterval(typingInterval);
