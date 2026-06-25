@@ -22,12 +22,13 @@ const { PermissionsBitField, ChannelType, EmbedBuilder } = require('discord.js')
 const { GoogleGenerativeAI }               = require('@google/generative-ai');
 const axios                                = require('axios');
 
-const Driver        = require('../models/Driver');
-const DriverRating  = require('../models/DriverRating');
-const OmmyUser      = require('../models/OmmyUser');
-const ChannelCache  = require('../models/ChannelCache');
-const Maintenance   = require('../models/Maintenance');
-const Warn          = require('../models/Warn');
+const Driver              = require('../models/Driver');
+const DriverRating        = require('../models/DriverRating');
+const OmmyUser            = require('../models/OmmyUser');
+const ChannelCache        = require('../models/ChannelCache');
+const Maintenance         = require('../models/Maintenance');
+const Warn                = require('../models/Warn');
+const PendingRoleRestore  = require('../models/PendingRoleRestore');
 const { learnFromGuild, getKnowledgeContext } = require('../services/learner');
 
 // ── Constants ─────────────────────────────────────────────────────────────
