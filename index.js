@@ -33,6 +33,7 @@ const DotyVote = require('./models/DotyVote');
 const SeasonVote = require('./models/SeasonVote');
 const Maintenance = require('./models/Maintenance');
 const PrefixConfig = require('./models/PrefixConfig');
+const PendingRoleRestore = require('./models/PendingRoleRestore');
 const { onStartup: teamRadioStartup } = require('./commands/teamradio');
 const { checkExpiredInterviews }      = require('./commands/interview');
 
