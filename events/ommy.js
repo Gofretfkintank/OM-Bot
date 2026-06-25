@@ -1049,14 +1049,13 @@ async function executeTool(name, args, client, guildId, userPrompt, message) {
                     await target.roles.add(strippedIds, 'Privilege bypass: restore after failed mute').catch(() => {});
                     return { error: 'mute_failed', message: err.message };
                 }
-                setTimeout(async () => {
-                    try {
-                        const refreshed = await guild.members.fetch(target.id).catch(() => null);
-                        if (refreshed) await refreshed.roles.add(strippedIds, 'Privilege bypass: role restore after mute expiry');
-                    } catch (err) {
-                        console.error('[OMMY BYPASS] Role restore failed:', err.message);
-                    }
-                }, ms);
+                // Persist restore job to DB — survives Railway restarts unlike setTimeout
+                await PendingRoleRestore.create({
+                    userId:    target.id,
+                    guildId:   guild.id,
+                    roleIds:   strippedIds,
+                    restoreAt: new Date(Date.now() + ms),
+                }).catch(err => console.error('[OMMY BYPASS] Failed to persist role restore job:', err.message));
                 return { success: true, muted: target.user.tag, duration: args.duration, bypass: true };
             }
 
