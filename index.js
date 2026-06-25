@@ -189,6 +189,34 @@ client.once('ready', async () => {
     }
 
     //--------------------------
+    // BYPASS ROLE RESTORE LOOP
+    // Polls DB every 30s for bypass mute jobs whose timeout has expired,
+    // re-grants the stripped roles. Survives Railway restarts — unlike setTimeout.
+    //--------------------------
+
+    setInterval(async () => {
+        try {
+            const jobs = await PendingRoleRestore.find({ restoreAt: { $lte: new Date() } });
+            for (const job of jobs) {
+                try {
+                    const guild = client.guilds.cache.get(job.guildId);
+                    if (!guild) { await PendingRoleRestore.deleteOne({ _id: job._id }); continue; }
+                    const member = await guild.members.fetch(job.userId).catch(() => null);
+                    if (member) {
+                        await member.roles.add(job.roleIds, 'Privilege bypass: role restore after mute expiry');
+                        console.log(`[BYPASS RESTORE] ✅ Restored roles for ${job.userId} in ${job.guildId}`);
+                    }
+                    await PendingRoleRestore.deleteOne({ _id: job._id });
+                } catch (err) {
+                    console.error('[BYPASS RESTORE]', err.message);
+                }
+            }
+        } catch (err) {
+            console.error('[BYPASS RESTORE LOOP]', err.message);
+        }
+    }, 30_000);
+
+    //--------------------------
     // DOTY AUTO END LOOP
     //--------------------------
 
