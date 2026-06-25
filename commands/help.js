@@ -41,6 +41,9 @@ module.exports = {
                 '**`/dice`** — Roll dice against the house. Highest roll wins.',
                 '**`/roulette`** — Spin the European roulette wheel.',
                 '**`/crash`** — Bet on the crash multiplier before it collapses.',
+                '**`/highlow`** — Guess if the next card is Higher or Lower. Chain correct guesses for bigger multipliers!',
+                '**`/mines`** — Reveal safe squares on a minefield grid. Hit a mine and lose it all.',
+                '**`/plinko`** — Drop the ball and watch it bounce into a multiplier bucket. (Low / Mid / High risk)',
                 '**`/bet`** — Open or join a race betting pool.',
             ],
 
