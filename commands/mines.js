@@ -56,10 +56,10 @@ module.exports = {
         )
         .addIntegerOption(opt =>
             opt.setName('mines')
-                .setDescription('Number of mines on the grid (1-10)')
+                .setDescription('Number of mines on the grid (1-5)')
                 .setRequired(true)
                 .setMinValue(1)
-                .setMaxValue(10)
+                .setMaxValue(5)
         ),
 
     async execute(interaction) {
