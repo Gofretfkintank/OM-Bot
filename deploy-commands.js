@@ -15,7 +15,8 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 // BURASI ÖNEMLİ
 const guilds = [
     process.env.GUILD_ID_1,
-    process.env.GUILD_ID_2
+    process.env.GUILD_ID_2,
+    process.env.GUILD_ID_3
 ].filter(Boolean);
 
 (async () => {
