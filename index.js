@@ -64,7 +64,8 @@ const CO_OWNER_ROLE_ID = "1447144645489328199";
 
 const allowedGuilds = [
     process.env.GUILD_ID_1,
-    process.env.GUILD_ID_2
+    process.env.GUILD_ID_2,
+    process.env.GUILD_ID_3
 ].filter(Boolean);
 
 //--------------------------
