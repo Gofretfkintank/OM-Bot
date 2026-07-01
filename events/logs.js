@@ -1,16 +1,37 @@
 const { EmbedBuilder, AuditLogEvent, ChannelType } = require('discord.js');
+const GuildConfig = require('../models/GuildConfig');
 
 module.exports = (client) => {
-    const MAIN_SERVER    = "1446960659072946218";
-    const LOG_CHANNEL_ID = "1490817414554845184";
+
+    //--------------------------
+    // PER-GUILD LOG CHANNEL (cached, configured via /setup logs)
+    //--------------------------
+
+    const logChannelCache = new Map(); // guildId -> channelId | null
+
+    async function getLogChannelId(guildId) {
+        if (logChannelCache.has(guildId)) return logChannelCache.get(guildId);
+        const config = await GuildConfig.findOne({ guildId }).catch(() => null);
+        const channelId = config?.logChannelId || null;
+        logChannelCache.set(guildId, channelId);
+        return channelId;
+    }
+
+    // Emitted by /setup logs whenever a guild's log channel changes
+    client.on('logConfigUpdate', (guildId) => {
+        logChannelCache.delete(guildId);
+    });
 
     //--------------------------
     // SEND HELPER
     //--------------------------
 
-    async function sendLog(embed) {
+    async function sendLog(embed, guildId) {
+        const channelId = await getLogChannelId(guildId);
+        if (!channelId) return; // logging not configured for this guild
+
         try {
-            const ch = await client.channels.fetch(LOG_CHANNEL_ID);
+            const ch = await client.channels.fetch(channelId);
             if (ch) await ch.send({ embeds: [embed] });
         } catch (e) {
             console.error('[LOGS] Send error:', e.message);
@@ -50,7 +71,7 @@ module.exports = (client) => {
     // 1. MESSAGE DELETED
     //--------------------------
     client.on('messageDelete', async (msg) => {
-        if (msg.guild?.id !== MAIN_SERVER || msg.author?.bot) return;
+        if (!msg.guild || msg.author?.bot) return;
 
         const entry = await getAuditEntry(msg.guild, AuditLogEvent.MessageDelete, msg.author.id);
         const deletedBy = entry ? `<@${entry.executor.id}> (${entry.executor.tag})` : 'Self or Unknown';
@@ -81,14 +102,14 @@ module.exports = (client) => {
         }
 
         embed.setTimestamp();
-        await sendLog(embed);
+        await sendLog(embed, msg.guild.id);
     });
 
     //--------------------------
     // 2. MESSAGE EDITED
     //--------------------------
     client.on('messageUpdate', async (oldMsg, newMsg) => {
-        if (oldMsg.guild?.id !== MAIN_SERVER || oldMsg.author?.bot) return;
+        if (!oldMsg.guild || oldMsg.author?.bot) return;
         if (oldMsg.content === newMsg.content) return;
 
         const embed = new EmbedBuilder()
@@ -105,14 +126,14 @@ module.exports = (client) => {
             )
             .setTimestamp();
 
-        await sendLog(embed);
+        await sendLog(embed, oldMsg.guild.id);
     });
 
     //--------------------------
     // 3. BULK MESSAGE DELETE
     //--------------------------
     client.on('messageDeleteBulk', async (messages, channel) => {
-        if (channel.guild?.id !== MAIN_SERVER) return;
+        if (!channel.guild) return;
 
         const entry = await getAuditEntry(channel.guild, AuditLogEvent.MessageBulkDelete, channel.id);
 
@@ -126,15 +147,13 @@ module.exports = (client) => {
             )
             .setTimestamp();
 
-        await sendLog(embed);
+        await sendLog(embed, channel.guild.id);
     });
 
     //--------------------------
     // 4. MEMBER JOIN
     //--------------------------
     client.on('guildMemberAdd', async (member) => {
-        if (member.guild.id !== MAIN_SERVER) return;
-
         const accountAge = Date.now() - member.user.createdTimestamp;
         const isNew      = accountAge < 7 * 24 * 60 * 60 * 1000; // 7 gün
 
@@ -152,15 +171,13 @@ module.exports = (client) => {
             )
             .setTimestamp();
 
-        await sendLog(embed);
+        await sendLog(embed, member.guild.id);
     });
 
     //--------------------------
     // 5. MEMBER LEAVE / KICK
     //--------------------------
     client.on('guildMemberRemove', async (member) => {
-        if (member.guild.id !== MAIN_SERVER) return;
-
         const entry   = await getAuditEntry(member.guild, AuditLogEvent.MemberKick, member.id);
         const wasKick = !!entry;
 
@@ -187,15 +204,13 @@ module.exports = (client) => {
         }
 
         embed.setTimestamp();
-        await sendLog(embed);
+        await sendLog(embed, member.guild.id);
     });
 
     //--------------------------
     // 6. BAN
     //--------------------------
     client.on('guildBanAdd', async (ban) => {
-        if (ban.guild.id !== MAIN_SERVER) return;
-
         const entry = await getAuditEntry(ban.guild, AuditLogEvent.MemberBanAdd, ban.user.id);
 
         const embed = new EmbedBuilder()
@@ -210,15 +225,13 @@ module.exports = (client) => {
             )
             .setTimestamp();
 
-        await sendLog(embed);
+        await sendLog(embed, ban.guild.id);
     });
 
     //--------------------------
     // 7. UNBAN
     //--------------------------
     client.on('guildBanRemove', async (ban) => {
-        if (ban.guild.id !== MAIN_SERVER) return;
-
         const entry = await getAuditEntry(ban.guild, AuditLogEvent.MemberBanRemove, ban.user.id);
 
         const embed = new EmbedBuilder()
@@ -231,15 +244,13 @@ module.exports = (client) => {
             )
             .setTimestamp();
 
-        await sendLog(embed);
+        await sendLog(embed, ban.guild.id);
     });
 
     //--------------------------
     // 8. TIMEOUT (mute)
     //--------------------------
     client.on('guildMemberUpdate', async (oldMember, newMember) => {
-        if (newMember.guild.id !== MAIN_SERVER) return;
-
         const wasTimedOut  = oldMember.communicationDisabledUntilTimestamp;
         const isTimedOut   = newMember.communicationDisabledUntilTimestamp;
         const roleAdded    = newMember.roles.cache.filter(r => !oldMember.roles.cache.has(r.id));
@@ -259,7 +270,7 @@ module.exports = (client) => {
                     { name: 'Reason',      value: entry?.reason || 'No reason provided',                   inline: false }
                 )
                 .setTimestamp();
-            await sendLog(embed);
+            await sendLog(embed, newMember.guild.id);
         }
 
         // Timeout removed
@@ -273,7 +284,7 @@ module.exports = (client) => {
                     { name: 'Removed By', value: entry ? `<@${entry.executor.id}>` : 'Unknown', inline: true }
                 )
                 .setTimestamp();
-            await sendLog(embed);
+            await sendLog(embed, newMember.guild.id);
         }
 
         // Role changes
@@ -291,7 +302,7 @@ module.exports = (client) => {
             if (roleRemoved.size > 0) embed.addFields({ name: '➖ Roles Removed', value: roleRemoved.map(r => `<@&${r.id}>`).join(', '), inline: false });
 
             embed.setTimestamp();
-            await sendLog(embed);
+            await sendLog(embed, newMember.guild.id);
         }
 
         // Nickname change
@@ -307,7 +318,7 @@ module.exports = (client) => {
                     { name: '📥 After',   value: newMember.nickname || '*None*',                        inline: true }
                 )
                 .setTimestamp();
-            await sendLog(embed);
+            await sendLog(embed, newMember.guild.id);
         }
     });
 
@@ -315,7 +326,7 @@ module.exports = (client) => {
     // 9. CHANNEL CREATED
     //--------------------------
     client.on('channelCreate', async (channel) => {
-        if (channel.guild?.id !== MAIN_SERVER) return;
+        if (!channel.guild) return;
 
         const entry = await getAuditEntry(channel.guild, AuditLogEvent.ChannelCreate, channel.id);
 
@@ -330,14 +341,14 @@ module.exports = (client) => {
             )
             .setTimestamp();
 
-        await sendLog(embed);
+        await sendLog(embed, channel.guild.id);
     });
 
     //--------------------------
     // 10. CHANNEL DELETED
     //--------------------------
     client.on('channelDelete', async (channel) => {
-        if (channel.guild?.id !== MAIN_SERVER) return;
+        if (!channel.guild) return;
 
         const entry = await getAuditEntry(channel.guild, AuditLogEvent.ChannelDelete, channel.id);
 
@@ -352,14 +363,14 @@ module.exports = (client) => {
             )
             .setTimestamp();
 
-        await sendLog(embed);
+        await sendLog(embed, channel.guild.id);
     });
 
     //--------------------------
     // 11. CHANNEL UPDATED
     //--------------------------
     client.on('channelUpdate', async (oldCh, newCh) => {
-        if (newCh.guild?.id !== MAIN_SERVER) return;
+        if (!newCh.guild) return;
 
         const changes = [];
         if (oldCh.name  !== newCh.name)  changes.push({ name: 'Name',  before: oldCh.name,  after: newCh.name });
@@ -381,15 +392,13 @@ module.exports = (client) => {
             )
             .setTimestamp();
 
-        await sendLog(embed);
+        await sendLog(embed, newCh.guild.id);
     });
 
     //--------------------------
     // 12. ROLE CREATED
     //--------------------------
     client.on('roleCreate', async (role) => {
-        if (role.guild.id !== MAIN_SERVER) return;
-
         const entry = await getAuditEntry(role.guild, AuditLogEvent.RoleCreate, role.id);
 
         const embed = new EmbedBuilder()
@@ -404,15 +413,13 @@ module.exports = (client) => {
             )
             .setTimestamp();
 
-        await sendLog(embed);
+        await sendLog(embed, role.guild.id);
     });
 
     //--------------------------
     // 13. ROLE DELETED
     //--------------------------
     client.on('roleDelete', async (role) => {
-        if (role.guild.id !== MAIN_SERVER) return;
-
         const entry = await getAuditEntry(role.guild, AuditLogEvent.RoleDelete, role.id);
 
         const embed = new EmbedBuilder()
@@ -425,15 +432,13 @@ module.exports = (client) => {
             )
             .setTimestamp();
 
-        await sendLog(embed);
+        await sendLog(embed, role.guild.id);
     });
 
     //--------------------------
     // 14. ROLE UPDATED
     //--------------------------
     client.on('roleUpdate', async (oldRole, newRole) => {
-        if (newRole.guild.id !== MAIN_SERVER) return;
-
         const changes = [];
         if (oldRole.name  !== newRole.name)  changes.push({ name: 'Name',  before: oldRole.name,     after: newRole.name });
         if (oldRole.color !== newRole.color) changes.push({ name: 'Color', before: oldRole.hexColor, after: newRole.hexColor });
@@ -452,14 +457,13 @@ module.exports = (client) => {
             )
             .setTimestamp();
 
-        await sendLog(embed);
+        await sendLog(embed, newRole.guild.id);
     });
 
     //--------------------------
     // 15. VOICE STATE UPDATE
     //--------------------------
     client.on('voiceStateUpdate', async (oldState, newState) => {
-        if (newState.guild.id !== MAIN_SERVER) return;
         if (oldState.channelId === newState.channelId) return; // mute/deafen değişikliklerini ignore et
 
         let title, color;
@@ -488,14 +492,14 @@ module.exports = (client) => {
             .addFields(fields)
             .setTimestamp();
 
-        await sendLog(embed);
+        await sendLog(embed, newState.guild.id);
     });
 
     //--------------------------
     // 16. INVITE CREATED
     //--------------------------
     client.on('inviteCreate', async (invite) => {
-        if (invite.guild?.id !== MAIN_SERVER) return;
+        if (!invite.guild) return;
 
         const embed = new EmbedBuilder()
             .setColor(0x00d2ff)
@@ -510,14 +514,13 @@ module.exports = (client) => {
             )
             .setTimestamp();
 
-        await sendLog(embed);
+        await sendLog(embed, invite.guild.id);
     });
 
     //--------------------------
     // 17. EMOJI CREATED / DELETED
     //--------------------------
     client.on('emojiCreate', async (emoji) => {
-        if (emoji.guild.id !== MAIN_SERVER) return;
         const entry = await getAuditEntry(emoji.guild, AuditLogEvent.EmojiCreate, emoji.id);
         const embed = new EmbedBuilder()
             .setColor(0xf1c40f)
@@ -529,11 +532,10 @@ module.exports = (client) => {
                 { name: 'Created By', value: entry ? `<@${entry.executor.id}>` : 'Unknown',         inline: true }
             )
             .setTimestamp();
-        await sendLog(embed);
+        await sendLog(embed, emoji.guild.id);
     });
 
     client.on('emojiDelete', async (emoji) => {
-        if (emoji.guild.id !== MAIN_SERVER) return;
         const entry = await getAuditEntry(emoji.guild, AuditLogEvent.EmojiDelete, emoji.id);
         const embed = new EmbedBuilder()
             .setColor(0xff4444)
@@ -543,15 +545,13 @@ module.exports = (client) => {
                 { name: 'Deleted By', value: entry ? `<@${entry.executor.id}>` : 'Unknown',         inline: true }
             )
             .setTimestamp();
-        await sendLog(embed);
+        await sendLog(embed, emoji.guild.id);
     });
 
     //--------------------------
     // 18. SERVER UPDATED
     //--------------------------
     client.on('guildUpdate', async (oldGuild, newGuild) => {
-        if (newGuild.id !== MAIN_SERVER) return;
-
         const changes = [];
         if (oldGuild.name              !== newGuild.name)              changes.push({ name: 'Name',            before: oldGuild.name,              after: newGuild.name });
         if (oldGuild.verificationLevel !== newGuild.verificationLevel) changes.push({ name: 'Verification',    before: String(oldGuild.verificationLevel), after: String(newGuild.verificationLevel) });
@@ -569,6 +569,6 @@ module.exports = (client) => {
             )
             .setTimestamp();
 
-        await sendLog(embed);
+        await sendLog(embed, newGuild.id);
     });
 };
