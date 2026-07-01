@@ -731,6 +731,7 @@ client.on('messageCreate', async message => {
         'lockchannel':   'lockchannel',
         'unlockchannel': 'unlockchannel',
         'slowmode':      'slowmode',
+        'purge':         'purge',
         'addrole':       'addrole',
         'delrole':       'delrole',
         'editrole':      'editrole',
