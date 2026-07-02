@@ -120,6 +120,12 @@ module.exports = {
                 if (userVote[i.user.id].length >= 2)
                     return await i.reply({ content: '🚫 You already used your 2 votes.', flags: MessageFlags.Ephemeral });
 
+                // Eğer 1 oy hakkı kalmışsa ve yeni oy seçiliyorsa eski oyu sil (missclick düzeltme)
+                if (userVote[i.user.id].length === 1) {
+                    const prev = userVote[i.user.id][0];
+                    votes[prev] = votes[prev].filter(uid => uid !== i.user.id);
+                }
+
                 votes[selected].push(i.user.id);
                 userVote[i.user.id].push(selected);
 
