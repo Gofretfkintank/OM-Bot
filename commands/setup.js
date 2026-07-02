@@ -2,6 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = 
 const GuildConfig = require('../models/GuildConfig');
 
 function ok(desc)  { return new EmbedBuilder().setColor(0x2ecc71).setDescription(desc); }
+function err(desc) { return new EmbedBuilder().setColor(0xe74c3c).setDescription(desc); }
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -10,32 +11,31 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .addSubcommand(sub =>
             sub.setName('logs')
-                .setDescription('Set (or clear) the audit log channel for this server.')
+                .setDescription('Set the audit log channel for this server.')
                 .addChannelOption(o =>
                     o.setName('channel')
-                        .setDescription('Channel to send logs to. Leave empty to disable logging.')
+                        .setDescription('Target channel (defaults to the channel you run this in)')
                         .addChannelTypes(ChannelType.GuildText)
                         .setRequired(false)
                 )
+        )
+        .addSubcommand(sub =>
+            sub.setName('logs-off')
+                .setDescription('Disable audit logging for this server.')
         ),
 
     async execute(interaction) {
         const sub = interaction.options.getSubcommand();
-        if (sub !== 'logs') return;
-
-        const channel = interaction.options.getChannel('channel');
         await interaction.deferReply();
 
-        await GuildConfig.findOneAndUpdate(
-            { guildId: interaction.guildId },
-            { $set: { logChannelId: channel ? channel.id : null } },
-            { upsert: true }
-        );
+        if (sub === 'logs-off') {
+            await GuildConfig.findOneAndUpdate(
+                { guildId: interaction.guildId },
+                { $set: { logChannelId: null } },
+                { upsert: true }
+            );
+            interaction.client.emit('logConfigUpdate', interaction.guildId);
 
-        // Bust events/logs.js's in-memory cache so the change applies immediately
-        interaction.client.emit('logConfigUpdate', interaction.guildId);
-
-        if (!channel) {
             return interaction.editReply({ embeds: [
                 ok('🔕 Audit logging has been disabled for this server.')
                     .setFooter({ text: `Set by ${interaction.user.tag}` })
@@ -43,20 +43,42 @@ module.exports = {
             ]});
         }
 
-        const perms = channel.permissionsFor(interaction.guild.members.me);
-        const missingPerms = !perms?.has(PermissionFlagsBits.SendMessages) || !perms?.has(PermissionFlagsBits.EmbedLinks);
+        if (sub === 'logs') {
+            // No channel given → bind to the channel the command was run in
+            let channel = interaction.options.getChannel('channel');
+            if (!channel) {
+                if (interaction.channel?.type !== ChannelType.GuildText) {
+                    return interaction.editReply({ embeds: [
+                        err('❌ Run this in a normal text channel, or pass the `channel` option.')
+                    ]});
+                }
+                channel = interaction.channel;
+            }
 
-        const embed = ok(`📋 Audit logs will now be sent to ${channel}.`)
-            .setFooter({ text: `Set by ${interaction.user.tag}` })
-            .setTimestamp();
+            await GuildConfig.findOneAndUpdate(
+                { guildId: interaction.guildId },
+                { $set: { logChannelId: channel.id } },
+                { upsert: true }
+            );
 
-        if (missingPerms) {
-            embed.addFields({
-                name: '⚠️ Warning',
-                value: 'I don\'t have Send Messages / Embed Links permission in that channel yet — logs won\'t go through until I do.'
-            });
+            // Bust events/logs.js's in-memory cache so the change applies immediately
+            interaction.client.emit('logConfigUpdate', interaction.guildId);
+
+            const perms = channel.permissionsFor(interaction.guild.members.me);
+            const missingPerms = !perms?.has(PermissionFlagsBits.SendMessages) || !perms?.has(PermissionFlagsBits.EmbedLinks);
+
+            const embed = ok(`📋 Audit logs will now be sent to ${channel}.`)
+                .setFooter({ text: `Set by ${interaction.user.tag}` })
+                .setTimestamp();
+
+            if (missingPerms) {
+                embed.addFields({
+                    name: '⚠️ Warning',
+                    value: 'I don\'t have Send Messages / Embed Links permission in that channel yet — logs won\'t go through until I do.'
+                });
+            }
+
+            return interaction.editReply({ embeds: [embed] });
         }
-
-        return interaction.editReply({ embeds: [embed] });
     }
 };
