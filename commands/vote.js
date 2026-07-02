@@ -1,84 +1,90 @@
-const { 
-    SlashCommandBuilder, 
-    EmbedBuilder, 
-    ActionRowBuilder, 
-    ButtonBuilder, 
-    ButtonStyle, 
-    ComponentType 
+const {
+    SlashCommandBuilder,
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ComponentType,
+    MessageFlags
 } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('vote')
         .setDescription('Start an advanced poll.')
-        .addStringOption(o => 
+        .addStringOption(o =>
             o.setName('question')
              .setDescription('Poll question')
              .setRequired(true)
         )
-        .addStringOption(o => 
+        .addStringOption(o =>
             o.setName('options')
              .setDescription('Separate with commas (A, B, C)')
              .setRequired(true)
         )
-        .addNumberOption(o => 
+        .addNumberOption(o =>
             o.setName('duration')
              .setDescription('Duration in minutes, can be decimal')
              .setRequired(true)
         ),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: false });
+        await interaction.deferReply();
 
         const question = interaction.options.getString('question');
-        const optionsArr = interaction.options.getString('options')
-            .split(',')
-            .map(s => s.trim())
-            .slice(0, 5);
+        const optionsArr = [...new Set(
+            interaction.options.getString('options')
+                .split(',')
+                .map(s => s.trim())
+                .filter(Boolean)
+        )].slice(0, 5);
+
+        if (optionsArr.length < 2) {
+            return interaction.editReply('❌ You need at least 2 different options.');
+        }
 
         const duration = interaction.options.getNumber('duration');
         const endTime = Date.now() + duration * 60000;
+        const endTs = Math.floor(endTime / 1000);
 
         const votes = {};
         const userVote = {};
         optionsArr.forEach(opt => votes[opt] = []);
 
+        const totalCount = () => Object.values(votes).reduce((a, b) => a + b.length, 0);
+
         const makeBar = (count) => {
-            const total = Object.values(votes).reduce((a, b) => a + b.length, 0);
+            const total = totalCount();
             const percent = total === 0 ? 0 : count / total;
             const filled = Math.round(percent * 10);
             return '█'.repeat(filled) + '░'.repeat(10 - filled);
         };
 
-        const buildEmbed = (ended = false) => {
-            const remainingMs = endTime - Date.now();
-            const totalVotes = Object.values(votes).reduce((a, b) => a + b.length, 0);
-            const minutes = Math.floor(Math.max(0, remainingMs) / 60000);
-            const seconds = Math.floor((Math.max(0, remainingMs) % 60000) / 1000);
+        const optionFields = (winner = null) => optionsArr.map(opt => ({
+            name: `${opt === winner ? '🏆' : '🔹'} ${opt}`,
+            value: `\`${votes[opt].length} votes\`\n${makeBar(votes[opt].length)}`,
+            inline: false
+        }));
 
-            const fields = optionsArr.map(opt => ({
-                name: `🔹 ${opt}`,
-                value: `\`${votes[opt].length} votes\`\n${makeBar(votes[opt].length)}`,
-                inline: false
-            }));
+        const buildEmbed = () => {
+            return new EmbedBuilder()
+                .setTitle(`📊 ${question.toUpperCase()}`)
+                .setColor('Blue')
+                .addFields(
+                    { name: '\u200B', value: '**⚠️ You only have 2 votes, don’t missclick!**', inline: false },
+                    ...optionFields(),
+                    { name: '\u200B', value: `⏱️ Ends <t:${endTs}:R>`, inline: false },
+                    { name: '\u200B', value: `**Total votes: ${totalCount()}**`, inline: false }
+                );
+        };
 
-            if (!ended) {
-                return new EmbedBuilder()
-                    .setTitle(`📊 ${question.toUpperCase()}`) // Soru başlığı
-                    .setColor('Blue')
-                    .addFields(
-                        { name: '\u200B', value: '**⚠️ You only have 2 votes, don’t missclick!**', inline: false }, // Uyarı
-                        ...fields,
-                        { name: '\u200B', value: `⏱️ Time remaining: ${minutes}:${seconds.toString().padStart(2,'0')}`, inline: false }, // Time remaining
-                        { name: '\u200B', value: `**Total votes: ${totalVotes}**`, inline: false } // Total votes
-                    );
-            } else {
-                const winner = optionsArr.reduce((a,b)=>votes[a].length >= votes[b].length ? a:b);
-                return new EmbedBuilder()
-                    .setTitle(`🏆 WINNER: ${winner}`) // Winner başlığı
-                    .setColor('Blue')
-                    .setDescription('Poll has ended!');
-            }
+        const buildEndEmbed = () => {
+            const winner = optionsArr.reduce((a, b) => votes[a].length >= votes[b].length ? a : b);
+            return new EmbedBuilder()
+                .setTitle(`🏆 WINNER: ${winner}`)
+                .setColor('Blue')
+                .setDescription(`Poll has ended! **Total votes: ${totalCount()}**`)
+                .addFields(optionFields(winner));
         };
 
         const row = new ActionRowBuilder().addComponents(
@@ -102,50 +108,38 @@ module.exports = {
         });
 
         collector.on('collect', async i => {
-            const idx = parseInt(i.customId.split('_')[1]);
-            const selected = optionsArr[idx];
+            try {
+                const idx = parseInt(i.customId.split('_')[1]);
+                const selected = optionsArr[idx];
 
-            if (!userVote[i.user.id]) userVote[i.user.id] = [];
+                if (!userVote[i.user.id]) userVote[i.user.id] = [];
 
-            if (userVote[i.user.id].includes(selected))
-                return i.reply({ content: '❌ You already voted for this option.', ephemeral: true });
+                if (userVote[i.user.id].includes(selected))
+                    return await i.reply({ content: '❌ You already voted for this option.', flags: MessageFlags.Ephemeral });
 
-            if (userVote[i.user.id].length >= 2)
-                return i.reply({ content: '🚫 You already used your 2 votes.', ephemeral: true });
+                if (userVote[i.user.id].length >= 2)
+                    return await i.reply({ content: '🚫 You already used your 2 votes.', flags: MessageFlags.Ephemeral });
 
-            // Eğer 1 oy hakkı kalmışsa ve yeni oy seçiliyorsa eski oyu sil
-            if (userVote[i.user.id].length === 1) {
-                const prev = userVote[i.user.id][0];
-                votes[prev] = votes[prev].filter(uid => uid !== i.user.id);
+                votes[selected].push(i.user.id);
+                userVote[i.user.id].push(selected);
+
+                await i.reply({ content: `✅ Vote registered for **${selected}** (${userVote[i.user.id].length}/2)`, flags: MessageFlags.Ephemeral });
+                await msg.edit({ embeds: [buildEmbed()] });
+            } catch (err) {
+                console.error('[vote] collect error:', err);
             }
-
-            votes[selected].push(i.user.id);
-            userVote[i.user.id].push(selected);
-
-            await i.reply({ content: `✅ Vote registered for **${selected}** (${userVote[i.user.id].length}/2)`, ephemeral: true });
-            await interaction.editReply({ embeds: [buildEmbed()] });
         });
 
-        const interval = setInterval(async () => {
-            if (collector.ended) return clearInterval(interval);
-            await interaction.editReply({ embeds: [buildEmbed()] });
-        }, 1000);
-
         collector.on('end', async () => {
-            clearInterval(interval);
-
-            const winner = optionsArr.reduce((a,b) => votes[a].length >= votes[b].length ? a : b);
-
-            const resultEmbed = new EmbedBuilder()
-                .setTitle(`🏆 WINNER: ${winner}`)
-                .setColor('Blue')
-                .setDescription('Poll has ended!');
-
-            await interaction.editReply({
-                content: null,
-                embeds: [resultEmbed],
-                components: []
-            });
+            try {
+                await msg.edit({
+                    content: null,
+                    embeds: [buildEndEmbed()],
+                    components: []
+                });
+            } catch (err) {
+                console.error('[vote] end error:', err);
+            }
         });
     }
 };
