@@ -596,6 +596,17 @@ client.on('interactionCreate', async interaction => {
     }
 
     //--------------------------
+    // VERIFY BUTTON SYSTEM
+    //--------------------------
+
+    else if (interaction.isButton() && interaction.customId.startsWith('verify_claim_')) {
+        const command = client.commands.get('verify');
+        if (command && command.buttonHandler) {
+            await command.buttonHandler(interaction);
+        }
+    }
+
+    //--------------------------
     // INTERVIEW BUTTON SYSTEM
     //--------------------------
 
