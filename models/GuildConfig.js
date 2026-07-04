@@ -12,6 +12,14 @@ const guildConfigSchema = new mongoose.Schema({
     logChannelId: {
         type: String,
         default: null
+    },
+    verifyRoleId: {
+        type: String,
+        default: null
+    },
+    verifyChannelId: {
+        type: String,
+        default: null
     }
 });
 
