@@ -6,7 +6,8 @@ const {
     Client,
     GatewayIntentBits,
     Collection,
-    PermissionsBitField
+    PermissionsBitField,
+    Partials
 } = require('discord.js');
 
 require('dotenv').config();
