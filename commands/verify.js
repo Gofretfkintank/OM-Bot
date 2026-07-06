@@ -80,6 +80,14 @@ module.exports = {
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
 
+        // Hard in-code gate: setDefaultMemberPermissions is only a Discord-side
+        // default that server admins can override in Integrations settings, and
+        // some clients show restricted commands anyway. This check runs on OUR
+        // side on every invocation — non-admins get rejected no matter what.
+        if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+            return interaction.editReply('❌ This command is **admin-only**.');
+        }
+
         const guild       = interaction.guild;
         const gateChannel = interaction.channel;
         const everyoneId  = guild.roles.everyone.id;
