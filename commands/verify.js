@@ -126,7 +126,7 @@ module.exports = {
             if (channel.id === gateChannel.id) continue;
 
             try {
-                if (everyoneAlreadyDenied(channel, everyoneId)) {
+                if (everyoneAlreadyDenied(channel, guild.roles.everyone)) {
                     skipped++;
                     continue;
                 }
