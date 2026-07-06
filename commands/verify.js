@@ -52,19 +52,15 @@ function buildVerifyRow(roleId) {
     );
 }
 
-// True if @everyone is already explicitly denied ViewChannel here —
-// either directly on this channel, or inherited from its parent category.
-// Channels flagged true are left alone: they're already gated by some
-// other system (admin-only, jail-room, team radio, etc.).
-function everyoneAlreadyDenied(channel, everyoneId) {
-    const own = channel.permissionOverwrites?.cache.get(everyoneId);
-    if (own?.deny.has(PermissionFlagsBits.ViewChannel)) return true;
-
-    if (channel.parent) {
-        const catOw = channel.parent.permissionOverwrites?.cache.get(everyoneId);
-        if (catOw?.deny.has(PermissionFlagsBits.ViewChannel)) return true;
-    }
-    return false;
+// True if @everyone effectively can't see this channel — checked via the
+// FULLY RESOLVED permission (base role perms + category + channel
+// overwrites), not just an explicit deny overwrite. Catches channels
+// hidden because @everyone's base role lacks ViewChannel, which the old
+// overwrite-only check missed — that bug caused /verify to grant the new
+// Member role view access to genuinely private (admin-only) channels.
+function everyoneAlreadyDenied(channel, everyoneRole) {
+    const resolved = channel.permissionsFor(everyoneRole);
+    return !resolved || !resolved.has(PermissionFlagsBits.ViewChannel);
 }
 
 //--------------------------------------------------
