@@ -109,24 +109,28 @@ module.exports = (client) => {
     // 2. MESSAGE EDITED
     //--------------------------
     client.on('messageUpdate', async (oldMsg, newMsg) => {
-        if (!oldMsg.guild || oldMsg.author?.bot) return;
+        // Restart sonrası cache boş olduğundan eski mesajların edit'inde
+        // oldMsg partial gelir ve author null olur → null guard şart.
+        const author = newMsg.author || oldMsg.author;
+        const guild  = newMsg.guild  || oldMsg.guild;
+        if (!guild || !author || author.bot) return;
         if (oldMsg.content === newMsg.content) return;
 
         const embed = new EmbedBuilder()
             .setColor(0xffa500)
             .setTitle('✏️ Message Edited')
-            .setThumbnail(oldMsg.author.displayAvatarURL())
+            .setThumbnail(author.displayAvatarURL())
             .setURL(newMsg.url)
             .addFields(
-                { name: 'Author',     value: `<@${oldMsg.author.id}> (${oldMsg.author.tag})`, inline: true },
-                { name: 'Channel',   value: `<#${oldMsg.channelId}>`,                         inline: true },
-                { name: 'Message ID',value: `\`${oldMsg.id}\``,                               inline: true },
-                { name: '📤 Before', value: oldMsg.content?.slice(0, 500) || '*None*',        inline: false },
+                { name: 'Author',     value: `<@${author.id}> (${author.tag})`, inline: true },
+                { name: 'Channel',   value: `<#${newMsg.channelId}>`,                         inline: true },
+                { name: 'Message ID',value: `\`${newMsg.id}\``,                               inline: true },
+                { name: '📤 Before', value: oldMsg.partial ? '*Unknown (not cached)*' : (oldMsg.content?.slice(0, 500) || '*None*'), inline: false },
                 { name: '📥 After',  value: newMsg.content?.slice(0, 500) || '*None*',        inline: false }
             )
             .setTimestamp();
 
-        await sendLog(embed, oldMsg.guild.id);
+        await sendLog(embed, guild.id);
     });
 
     //--------------------------
